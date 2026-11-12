@@ -1,8 +1,8 @@
 /* BTC Marine Conservation Hub — service worker (offline app shell) */
-const CACHE_VERSION = "btc-hub-v1";
+const CACHE_VERSION = "btc-hub-v2";
 const ASSETS = [
-  "./", "./index.html", "./styles.css?v=1", "./data.js?v=1",
-  "./store.js?v=1", "./app.js?v=1", "./manifest.json?v=1",
+  "./", "./index.html", "./styles.css?v=2", "./data.js?v=2",
+  "./store.js?v=2", "./app.js?v=2", "./manifest.json?v=2",
   "./logo.png", "./app-icon.png", "./icon.svg"
 ];
 
@@ -16,7 +16,18 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
-  // network-first for same-origin navigation, cache-first for assets
+  // Network-first for page navigations (so a new version always wins when online);
+  // cache-first for versioned assets (fast + offline).
+  if (req.mode === "navigate") {
+    e.respondWith(
+      fetch(req).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE_VERSION).then(c => c.put(req, copy));
+        return res;
+      }).catch(() => caches.match(req).then(c => c || caches.match("./index.html")))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(req).then(cached => cached ||
       fetch(req).then(res => {
