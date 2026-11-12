@@ -546,12 +546,13 @@
           const mod = S.moduleByCode(moduleCode);
           const ids = [...selectedStudents];
           const rows = resolveTemplate(mod, { arOption, arProgramme });
+          const groupId = S.uid("grp");
           let diveNum = 0, diveSiteIdx = 0, lastDay = 0;
           rows.forEach(r => {
             const isDive = r.type === "dive";
             const site = isDive ? (individualSites ? (sites["d" + diveSiteIdx] || "") : (sites.all || "")) : "";
             S.addSession({
-              moduleCode, courseCode: "", staff: staffName, assist, shadow, surveyLead,
+              moduleCode, courseCode: "", groupId, staff: staffName, assist, shadow, surveyLead,
               studentIds: ids, kind: "module",
               date: addDays(date, r.day), start: r.start, end: r.end,
               section: isDive ? "dive" : "lecture", medium: isDive ? (mod.medium || "dive") : "land",
@@ -637,6 +638,8 @@
     buildStudents();
 
     const body = [
+      (existing && se.kind === "module") ? el("button", { class: "btn btn-primary", style: "margin-bottom:12px;width:100%",
+        onclick: () => { closeModal(); openModuleGroupEdit(existing); } }, "✎ Edit the whole module (staff, students, dates, site)") : null,
       field("Session type", kindSel),
       !existing ? el("p", { class: "muted small", style: "margin-top:-6px", text: "To schedule a taught module (lecture + its dives), use “+ Schedule module” instead." }) : null,
       specific,
@@ -680,6 +683,83 @@
     return el("select", { onchange: e => onChange(e.target.value) },
       [el("option", { value: "" }, "— none —"), ...S.staff().map(s =>
         el("option", { value: s.name, selected: current === s.name ? "selected" : null }, s.name))]);
+  }
+
+  // All sessions belonging to the same module booking as `se`.
+  function moduleGroupSessions(se) {
+    if (se.groupId) return S.sessions().filter(x => x.groupId === se.groupId);
+    const key = (se.studentIds || []).slice().sort().join(",");
+    return S.sessions().filter(x => x.moduleCode === se.moduleCode && x.kind === "module" &&
+      (x.studentIds || []).slice().sort().join(",") === key);
+  }
+  const commonVal = (arr, f) => {
+    const vals = [...new Set(arr.map(s => s[f] || ""))];
+    return vals.length === 1 ? vals[0] : "";
+  };
+
+  // Edit a whole module booking at once (staff, helpers, students, site, dates).
+  function openModuleGroupEdit(anchor) {
+    const group = moduleGroupSessions(anchor);
+    const mod = S.moduleByCode(anchor.moduleCode);
+    let staff = commonVal(group, "staff"), assist = commonVal(group, "assist"),
+        shadow = commonVal(group, "shadow"), surveyLead = commonVal(group, "surveyLead");
+    let diveSite = commonVal(group.filter(s => s.section === "dive"), "diveSite");
+    const earliest = group.map(s => s.date).sort()[0];
+    let newStart = earliest;
+    const studentIds = new Set();
+    group.forEach(s => (s.studentIds || []).forEach(id => studentIds.add(id)));
+
+    const studentsBox = el("div", { class: "chips" });
+    function buildStudents() {
+      studentsBox.innerHTML = "";
+      S.students().forEach(s => {
+        const on = studentIds.has(s.id);
+        studentsBox.appendChild(el("div", { class: "chip" + (on ? " on" : ""), onclick: () => {
+          if (studentIds.has(s.id)) studentIds.delete(s.id); else studentIds.add(s.id);
+          buildStudents();
+        }}, s.name));
+      });
+    }
+    buildStudents();
+
+    const body = [
+      el("div", { class: "warn-banner", style: "background:var(--accent-soft);color:var(--ink);border-color:var(--accent-2)",
+        text: `${mod ? mod.name : anchor.moduleCode} — ${group.length} session${group.length !== 1 ? "s" : ""}. Changes apply to all of them.` }),
+      field("Lead staff (all sessions)", staffSelect(v => staff = v, staff)),
+      el("div", { class: "field-row" }, [
+        field("Assist", el("input", { value: assist, oninput: e => assist = e.target.value })),
+        field("Shadow", el("input", { value: shadow, oninput: e => shadow = e.target.value }))
+      ]),
+      field("Survey Lead", el("input", { value: surveyLead, oninput: e => surveyLead = e.target.value })),
+      field("Preferred dive site (all dives; blank leaves each as-is)", el("input", { value: diveSite, placeholder: "e.g. Aow Leuk", oninput: e => diveSite = e.target.value })),
+      field("Move whole module — new start date (keeps the day spacing)", el("input", { type: "date", value: newStart, oninput: e => newStart = e.target.value })),
+      field("Students (all sessions)", studentsBox)
+    ];
+
+    modal({
+      title: "Edit whole module", wide: true, body,
+      actions: [
+        { label: "Cancel", onClick: closeModal },
+        { label: "Delete whole module", class: "btn-danger", onClick: () => {
+          if (confirm(`Delete all ${group.length} sessions of this module?`)) { group.forEach(s => S.deleteSession(s.id)); closeModal(); render(); } }},
+        { label: "Apply to all", class: "btn-primary", onClick: () => {
+          const offset = daysBetween(earliest, newStart);
+          const ids = [...studentIds];
+          group.forEach(s => {
+            const patch = { staff, assist, shadow, surveyLead, studentIds: ids };
+            if (diveSite && s.section === "dive") patch.diveSite = diveSite;
+            if (offset !== 0) patch.date = addDays(s.date, offset);
+            S.updateSession(s.id, patch);
+          });
+          closeModal(); render();
+          toast("Whole module updated");
+        }}
+      ]
+    });
+  }
+  function daysBetween(a, b) {
+    if (!a || !b) return 0;
+    return Math.round((parseISO(b) - parseISO(a)) / 86400000);
   }
 
   /* ========================================================================
