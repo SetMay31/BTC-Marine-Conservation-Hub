@@ -1134,7 +1134,7 @@
           el("span", { text: `${fmtDay(o.start)} – ${fmtDay(o.end)}` }),
           el("button", { class: "btn btn-sm btn-ghost", onclick: () => { S.removeStaffOff(st.id, o.id); render(); }, text: "remove" })
         ])),
-        el("button", { class: "btn btn-sm", style: "margin-top:8px", onclick: () => addOffPrompt(st) }, "+ Add OFF period"),
+        el("button", { class: "btn btn-sm", style: "margin-top:8px", onclick: () => addOffPrompt(st) }, "+ Add time off"),
         canTeachSection(st)
       ]));
     });
@@ -1145,13 +1145,13 @@
     const details = el("details", { style: "margin-top:10px" });
     const n = (st.canTeach || []).length;
     details.appendChild(el("summary", { style: "cursor:pointer;font-size:.82rem;font-weight:600;color:var(--ink-muted)",
-      text: `Instructor Level${n ? ` (${n})` : " — not set (no warnings)"}` }));
+      text: `Instructor Level${n ? ` (${n})` : ""}` }));
     const chips = el("div", { class: "chips", style: "margin-top:8px" });
     S.modules().forEach(m => {
       const chip = el("div", { class: "chip" + (can.has(m.code) ? " on" : ""), onclick: () => {
         if (can.has(m.code)) can.delete(m.code); else can.add(m.code);
         S.setStaffCanTeach(st.id, [...can]); chip.classList.toggle("on");
-        details.querySelector("summary").textContent = `Instructor Level${can.size ? ` (${can.size})` : " — not set (no warnings)"}`;
+        details.querySelector("summary").textContent = `Instructor Level${can.size ? ` (${can.size})` : ""}`;
       }}, m.code);
       chips.appendChild(chip);
     });
@@ -1167,7 +1167,7 @@
   }
   function addOffPrompt(st) {
     let start = todayISO(), end = todayISO();
-    modal({ title: "Add OFF period — " + st.name, body: [
+    modal({ title: "Add time off — " + st.name, body: [
       el("div", { class: "field-row" }, [
         field("From", el("input", { type: "date", value: start, oninput: e => start = e.target.value })),
         field("To", el("input", { type: "date", value: end, oninput: e => end = e.target.value }))
