@@ -113,6 +113,17 @@
     return box;
   }
   function closeModal() { $("#modal-root").innerHTML = ""; }
+  // In-app confirmation (native confirm() is blocked in some embedded webviews).
+  function confirmDialog(message, onYes, yesLabel = "Delete", danger = true) {
+    modal({
+      title: "Please confirm",
+      body: [el("p", { text: message })],
+      actions: [
+        { label: "Cancel", onClick: closeModal },
+        { label: yesLabel, class: danger ? "btn-danger" : "btn-primary", onClick: () => { closeModal(); onYes(); } }
+      ]
+    });
+  }
   function toast(msg) {
     const t = el("div", { class: "warn-banner", text: msg,
       style: "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:80;background:var(--accent);color:#fff;border:0;box-shadow:var(--shadow-lg)" });
@@ -660,11 +671,8 @@
 
     const actions = [{ label: "Cancel", onClick: closeModal }];
     if (existing) actions.push({ label: "Delete", class: "btn-danger", onClick: () => {
-      if (confirm("Delete this session?")) { S.deleteSession(existing.id); closeModal(); render(); } }});
+      confirmDialog("Delete this session?", () => { S.deleteSession(existing.id); render(); }); }});
     actions.push({ label: existing ? "Save" : "Create", class: "btn-primary", onClick: () => {
-      if (se.kind !== "survey" && (se.studentIds || []).length === 0 && se.kind === "module") {
-        if (!confirm("No students on this module section. Save anyway?")) return;
-      }
       if (existing) S.updateSession(existing.id, se); else S.addSession(se);
       closeModal(); render();
     }});
@@ -741,7 +749,7 @@
       actions: [
         { label: "Cancel", onClick: closeModal },
         { label: "Delete whole module", class: "btn-danger", onClick: () => {
-          if (confirm(`Delete all ${group.length} sessions of this module?`)) { group.forEach(s => S.deleteSession(s.id)); closeModal(); render(); } }},
+          confirmDialog(`Delete all ${group.length} sessions of this module?`, () => { group.forEach(s => S.deleteSession(s.id)); render(); }); }},
         { label: "Apply to all", class: "btn-primary", onClick: () => {
           const offset = daysBetween(earliest, newStart);
           const ids = [...studentIds];
@@ -877,7 +885,7 @@
 
     const actions = [{ label: "Cancel", onClick: closeModal }];
     if (existing) actions.push({ label: "Delete", class: "btn-danger", onClick: () => {
-      if (confirm("Delete " + existing.name + " and remove them from all sessions?")) { S.deleteStudent(existing.id); closeModal(); render(); } }});
+      confirmDialog("Delete " + existing.name + " and remove them from all sessions?", () => { S.deleteStudent(existing.id); render(); }); }});
     actions.push({ label: existing ? "Save" : "Add student", class: "btn-primary", onClick: () => {
       if (!s.name.trim()) return toast("Name is required");
       if (!s.email.trim()) return toast("Email is required");
@@ -954,7 +962,7 @@
 
   function toggleCert(stu, mc) {
     const cur = stu.certs && stu.certs[mc] && stu.certs[mc].issued;
-    if (cur) { if (confirm("Remove this certification?")) { S.setCert(stu.id, mc, false); reopenStudent(stu.id); } return; }
+    if (cur) { confirmDialog("Remove this certification?", () => { S.setCert(stu.id, mc, false); reopenStudent(stu.id); }, "Remove"); return; }
     let date = todayISO(), staffName = "";
     const body = [
       field("Certification date", el("input", { type: "date", value: date, oninput: e => date = e.target.value })),
