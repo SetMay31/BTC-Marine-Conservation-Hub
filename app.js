@@ -152,8 +152,8 @@
     const elOutstanding = [];
     studs.forEach(s => {
       S.studentModuleCodes(s).forEach(mc => {
-        const mod = S.moduleByCode(mc); if (!mod || !mod.elearning) return;
-        const done = s.elearning && s.elearning[mc];
+        const mod = S.moduleByCode(mc); if (!mod || !mod.elearn) return;
+        const done = s.elearning && s.elearning[mod.elearn];
         if (done) return;
         const hasUpcoming = S.studentModuleSessions(s.id, mc).some(se => se.date >= today);
         if (hasUpcoming) elOutstanding.push({ s, mod });
@@ -303,6 +303,7 @@
       el("div", { class: "s-meta" }, (se.staff || "— no staff") + (se.diveSite ? " · " + se.diveSite : "")),
       studs.length ? el("div", { class: "s-meta", text: studs.join(", ") }) : null,
       offWarn ? el("div", { class: "s-warn", text: "⚠ staff OFF" }) : null,
+      (se.staff && se.moduleCode && !S.staffCanTeach(se.staff, se.moduleCode)) ? el("div", { class: "s-warn", text: "⚠ not signed off to teach" }) : null,
       (!se.staff && se.kind !== "adhoc") ? el("div", { class: "s-warn", text: "⚠ no staff" }) : null
     ]);
     card.addEventListener("dragstart", e => e.dataTransfer.setData("text/plain", se.id));
@@ -427,7 +428,7 @@
     if (se.kind === "adhoc") return se.adhocLabel || "Session";
     const mod = S.moduleByCode(se.moduleCode);
     const base = mod ? mod.name : (se.moduleCode || "Session");
-    const tag = se.section === "lecture" ? "Lecture" : (se.section === "dive" ? `Dive${se.diveIndex ? " " + se.diveIndex : ""}` : "");
+    const tag = se.name || (se.section === "lecture" ? "Lecture" : (se.section === "dive" ? `Dive${se.diveIndex ? " " + se.diveIndex : ""}` : ""));
     return tag ? `${base} — ${tag}` : base;
   }
   function shortTitle(se) {
@@ -435,23 +436,46 @@
     if (se.kind === "adhoc") return se.adhocLabel || "Session";
     const mod = S.moduleByCode(se.moduleCode);
     const code = mod ? mod.code : se.moduleCode;
-    return `${code} ${se.section === "lecture" ? "Lec" : "D" + (se.diveIndex || "")}`;
+    return `${code} ${se.name || (se.section === "lecture" ? "Lec" : "D" + (se.diveIndex || ""))}`;
   }
   const byDateTime = (a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""));
 
   /* ========================================================================
      SCHEDULE MODULE (whole module create)
      ===================================================================== */
-  function openScheduleModule() {
-    let moduleCode = "", date = todayISO(), staffName = "", assist = "", shadow = "", surveyLead = "", diveSite = "";
-    const modules = S.modules();
+  // Resolve a module's scheduling template into dated rows.
+  function resolveTemplate(mod, opts = {}) {
+    if (!mod) return [];
+    if (mod.tmpl === "EMP") return S.template("EMP");
+    if (mod.tmpl === "CLEAN") return S.template("CLEAN");
+    if (mod.tmpl === "AR") {
+      let rows = [...S.template("AR")];
+      const o = S.template("AR_options");
+      rows = rows.concat(opts.arOption === "workshop" ? o.workshop : o.dives);
+      if (opts.arProgramme) rows = rows.concat(S.template("AR_day2"));
+      return rows;
+    }
+    // generated standard: lecture + mod.dives dives (2 per afternoon, one boat/block)
+    const rows = [{ day: 0, type: "lecture", name: "Lecture", start: "09:00", end: "10:30" }];
+    const n = mod.dives || 0;
+    for (let i = 0; i < n; i++) {
+      const day = Math.floor(i / 2), block = Math.floor(i / 2) + 1;
+      rows.push({ day, type: "dive", name: "Dive " + (i + 1), start: "12:00", end: "17:00", block });
+    }
+    return rows;
+  }
 
-    const moduleSel = el("select", { onchange: e => { moduleCode = e.target.value; refreshStudents(); } },
+  function openScheduleModule() {
+    let moduleCode = "", date = todayISO(), staffName = "", assist = "", shadow = "", surveyLead = "";
+    let arOption = "dives", arProgramme = true, individualSites = false;
+    const sites = {};               // all | d0,d1,...
+    const selectedStudents = new Set();
+
+    const moduleSel = el("select", { onchange: e => { moduleCode = e.target.value; refreshStudents(); rebuildAR(); rebuildSites(); } },
       [el("option", { value: "" }, "— choose a module —"),
-       ...modules.map(m => el("option", { value: m.code }, `${m.name} (${m.agency})`))]);
+       ...S.modules().map(m => el("option", { value: m.code }, `${m.name} (${m.agency})`))]);
 
     const studentsBox = el("div", { class: "chips" });
-    const selectedStudents = new Set();
     function refreshStudents() {
       studentsBox.innerHTML = "";
       if (!moduleCode) { studentsBox.appendChild(el("span", { class: "muted small", text: "Pick a module first." })); return; }
@@ -467,11 +491,40 @@
     }
     refreshStudents();
 
-    const staffSel = staffSelect(v => staffName = v);
+    const arBox = el("div");
+    function rebuildAR() {
+      arBox.innerHTML = "";
+      const mod = S.moduleByCode(moduleCode);
+      if (mod && mod.tmpl === "AR") {
+        arBox.appendChild(field("Day 1 afternoon", el("div", { class: "chips" }, [
+          chipToggle("Artificial Reefs Dives", arOption === "dives", () => { arOption = "dives"; rebuildAR(); rebuildSites(); }),
+          chipToggle("Workshop Day", arOption === "workshop", () => { arOption = "workshop"; rebuildAR(); rebuildSites(); })
+        ])));
+        arBox.appendChild(checkbox("Part of a programme (adds Day 2 morning dives)", arProgramme, v => { arProgramme = v; rebuildSites(); }));
+      }
+    }
+    rebuildAR();
+
+    const sitesBox = el("div");
+    function rebuildSites() {
+      sitesBox.innerHTML = "";
+      const mod = S.moduleByCode(moduleCode); if (!mod) return;
+      const dives = resolveTemplate(mod, { arOption, arProgramme }).filter(r => r.type === "dive");
+      if (!dives.length) return;
+      sitesBox.appendChild(checkbox("Set each dive's site individually (otherwise one site for all)", individualSites, v => { individualSites = v; rebuildSites(); }));
+      if (!individualSites) {
+        sitesBox.appendChild(field("Preferred dive site (all dives)", el("input", { placeholder: "e.g. Aow Leuk", value: sites.all || "", oninput: e => sites.all = e.target.value })));
+      } else {
+        dives.forEach((dv, i) => sitesBox.appendChild(field(dv.name, el("input", { placeholder: "dive site", value: sites["d" + i] || "", oninput: e => sites["d" + i] = e.target.value }))));
+      }
+    }
+    rebuildSites();
+
     const body = [
       field("Module", moduleSel),
+      arBox,
       field("Eligible students (only those enrolled in a course that includes this module)", studentsBox),
-      field("Lead staff", staffSel),
+      field("Lead staff", staffSelect(v => staffName = v)),
       el("div", { class: "field-row" }, [
         field("Assist (optional)", el("input", { placeholder: "name", oninput: e => assist = e.target.value })),
         field("Shadow (optional)", el("input", { placeholder: "name", oninput: e => shadow = e.target.value }))
@@ -480,8 +533,8 @@
         field("Survey Lead (optional)", el("input", { placeholder: "name", oninput: e => surveyLead = e.target.value })),
         field("Start date", el("input", { type: "date", value: date, oninput: e => date = e.target.value }))
       ]),
-      field("Preferred dive site (optional)", el("input", { placeholder: "e.g. Aow Leuk", oninput: e => diveSite = e.target.value })),
-      el("p", { class: "muted small", text: "Creates a 90-min lecture (09:00–10:30) and the module's dives (afternoon 12:00 & 14:00, overflowing to following days). Every section is movable afterwards." })
+      sitesBox,
+      el("p", { class: "muted small", text: "Lays out the module's lecture(s) and dives per its template. Every section is movable afterwards, and you can adjust staff/students per section." })
     ];
 
     modal({
@@ -492,29 +545,29 @@
           if (!moduleCode) return toast("Choose a module");
           const mod = S.moduleByCode(moduleCode);
           const ids = [...selectedStudents];
-          const base = { moduleCode, courseCode: "", staff: staffName, assist, shadow, surveyLead,
-            studentIds: ids, diveSite, kind: "module" };
-          // lecture
-          S.addSession({ ...base, date, start: "09:00", end: "10:30", section: "lecture", medium: "land" });
-          // dives
-          const n = mod.dives || 0;
-          let d = date, slotIdx = 0;
-          const slots = ["12:00", "14:00"];
-          for (let k = 1; k <= n; k++) {
-            if (slotIdx >= slots.length) { d = addDays(d, 1); slotIdx = 0; }
-            S.addSession({ ...base, date: d, start: slots[slotIdx], end: addHours(slots[slotIdx], 2),
-              section: "dive", diveIndex: k, medium: mod.medium || "dive" });
-            slotIdx++;
-          }
+          const rows = resolveTemplate(mod, { arOption, arProgramme });
+          let diveNum = 0, diveSiteIdx = 0, lastDay = 0;
+          rows.forEach(r => {
+            const isDive = r.type === "dive";
+            const site = isDive ? (individualSites ? (sites["d" + diveSiteIdx] || "") : (sites.all || "")) : "";
+            S.addSession({
+              moduleCode, courseCode: "", staff: staffName, assist, shadow, surveyLead,
+              studentIds: ids, kind: "module",
+              date: addDays(date, r.day), start: r.start, end: r.end,
+              section: isDive ? "dive" : "lecture", medium: isDive ? (mod.medium || "dive") : "land",
+              name: r.name, block: r.block || null, diveIndex: isDive ? ++diveNum : null, diveSite: site
+            });
+            if (isDive) diveSiteIdx++;
+            lastDay = Math.max(lastDay, r.day);
+          });
           closeModal(); UI.schedView = "master"; UI.weekStart = mondayOf(date); render();
-          toast(`Scheduled ${mod.code}: lecture + ${n} dive${n !== 1 ? "s" : ""}`);
+          toast(`Scheduled ${mod.name} (${lastDay + 1} day${lastDay ? "s" : ""})`);
         }}
       ], wide: true
     });
   }
-  function addHours(hhmm, h) {
-    let [H, M] = hhmm.split(":").map(Number); H += h; if (H > 23) H = 23;
-    return String(H).padStart(2, "0") + ":" + String(M).padStart(2, "0");
+  function chipToggle(label, on, onClick) {
+    return el("div", { class: "chip" + (on ? " on" : ""), onclick: onClick }, label);
   }
 
   /* ========================================================================
@@ -542,12 +595,13 @@
         }}, [el("option", { value: "" }, "— choose —"), ...surveys.map(c =>
           el("option", { value: c.code, selected: se.courseCode === c.code ? "selected" : null }, c.name))])));
       } else if (se.kind === "adhoc") {
-        const types = S.settings().adhocTypes;
-        specific.appendChild(field("Type", el("select", { onchange: e => {
-          const t = types.find(x => x.key === e.target.value);
-          se.adhocType = t ? t.key : ""; se.adhocLabel = t ? t.label : ""; se.medium = t ? t.medium : "dive";
+        const types = S.diveComponents();
+        specific.appendChild(field("Dive / flexible type", el("select", { onchange: e => {
+          const t = types.find(x => x.code === e.target.value);
+          se.adhocType = t ? t.code : ""; se.adhocLabel = t ? t.name : ""; se.medium = t ? t.medium : "dive";
+          se.section = "dive";
         }}, [el("option", { value: "" }, "— choose —"), ...types.map(t =>
-          el("option", { value: t.key, selected: se.adhocType === t.key ? "selected" : null }, t.label))])));
+          el("option", { value: t.code, selected: se.adhocType === t.code ? "selected" : null }, t.name))])));
       } else {
         specific.appendChild(field("Module", el("select", { onchange: e => { se.moduleCode = e.target.value; }},
           [el("option", { value: "" }, "— choose —"), ...S.modules().map(m =>
@@ -751,32 +805,58 @@
   function renderStudentProgress(stu) {
     const wrap = el("div", {}, [el("h4", { text: "Module progress", style: "margin-top:16px" })]);
     const codes = S.studentModuleCodes(stu);
-    if (!codes.length) { wrap.appendChild(el("p", { class: "muted small", text: "No modules yet — enrol in a course with modules configured." })); return wrap; }
+    if (!codes.length) wrap.appendChild(el("p", { class: "muted small", text: "No modules yet — enrol in a course with modules configured." }));
     codes.forEach(mc => {
       const mod = S.moduleByCode(mc); if (!mod) return;
       const st = S.moduleStatus(stu, mc);
       const cert = stu.certs && stu.certs[mc];
-      const row = el("div", { class: "card", style: "margin-bottom:8px;padding:10px" }, [
+      wrap.appendChild(el("div", { class: "card", style: "margin-bottom:8px;padding:10px" }, [
         el("div", { class: "spread" }, [
           el("div", {}, [
             el("strong", { text: mod.name }), " ",
-            el("span", { class: "pill " + (mod.agency === "CD" ? "cd" : "btc"), text: mod.agency })
+            el("span", { class: "pill " + (mod.agency === "CD" ? "cd" : "btc"), text: mod.agency }),
+            mod.elearn === "CORALTAX" ? el("span", { class: "pill muted2", text: "shared e-learning" }) : null
           ]),
           el("div", { class: "stages" }, [
-            mod.elearning ? stageDot("E", st.elearning, () => { S.setElearning(stu.id, mc, !st.elearning); reopenStudent(stu.id); }) : stageDot("E", null),
+            mod.elearn ? stageDot("E", st.elearning, () => { S.setElearning(stu.id, mod.elearn, !st.elearning); reopenStudent(stu.id); }) : stageDot("E", null),
             stageDot("C", st.classroom),
             mod.dives > 0 ? stageDot("D", st.dives) : stageDot("D", null),
             stageDot("✓", st.cert, () => toggleCert(stu, mc))
           ])
         ]),
         el("div", { class: "small muted", style: "margin-top:4px" },
-          `${mod.elearning ? (st.elearning ? "e-learning ✓ · " : "e-learning pending · ") : ""}` +
+          `${mod.elearn ? (st.elearning ? "e-learning ✓ · " : "e-learning pending · ") : ""}` +
           `${st.classroom ? "classroom ✓ · " : "classroom pending · "}` +
           `${mod.dives > 0 ? (st.dives ? "dives ✓" : `dives ${st.divesScheduled}/${st.needDives}`) : "no dives"}` +
           (cert && cert.issued ? ` · certified ${fmtDay(cert.date)}${cert.staff ? " by " + cert.staff : ""}` : ""))
-      ]);
-      wrap.appendChild(row);
+      ]));
     });
+
+    // Required dive components (no cert)
+    const reqs = S.studentDiveReqs(stu);
+    if (reqs.length) {
+      wrap.appendChild(el("h4", { text: "Required dives", style: "margin-top:16px" }));
+      reqs.forEach(r => {
+        const st = S.diveReqStatus(stu, r.code, r.count);
+        wrap.appendChild(el("div", { class: "list-line" }, [
+          el("span", {}, `${r.name}${r.count > 1 ? ` ×${r.count}` : ""}`),
+          el("span", { class: "small " + (st.complete ? "muted" : ""), text: st.complete ? "✓ complete" : `${st.done}/${r.count} done · ${st.scheduled} scheduled` })
+        ]));
+      });
+    }
+
+    // CDM extras (Course Assist / Survey Lead)
+    const extras = S.studentExtras(stu);
+    if (extras.length) {
+      wrap.appendChild(el("h4", { text: "Divemaster requirements", style: "margin-top:16px" }));
+      extras.forEach(ex => {
+        const done = stu.extrasDone && stu.extrasDone[ex];
+        wrap.appendChild(checkbox(ex, done, v => {
+          stu.extrasDone = stu.extrasDone || {}; if (v) stu.extrasDone[ex] = true; else delete stu.extrasDone[ex];
+          S.upsertStudent(stu);
+        }));
+      });
+    }
     return wrap;
   }
   function stageDot(label, state, onClick) {
@@ -916,10 +996,30 @@
           el("span", { text: `${fmtDay(o.start)} – ${fmtDay(o.end)}` }),
           el("button", { class: "btn btn-sm btn-ghost", onclick: () => { S.removeStaffOff(st.id, o.id); render(); }, text: "remove" })
         ])),
-        el("button", { class: "btn btn-sm", style: "margin-top:8px", onclick: () => addOffPrompt(st) }, "+ Add OFF period")
+        el("button", { class: "btn btn-sm", style: "margin-top:8px", onclick: () => addOffPrompt(st) }, "+ Add OFF period"),
+        canTeachSection(st)
       ]));
     });
     root.appendChild(grid);
+  }
+  function canTeachSection(st) {
+    const can = new Set(st.canTeach || []);
+    const details = el("details", { style: "margin-top:10px" });
+    const n = (st.canTeach || []).length;
+    details.appendChild(el("summary", { style: "cursor:pointer;font-size:.82rem;font-weight:600;color:var(--ink-muted)",
+      text: `Can teach${n ? ` (${n})` : " — not set (no warnings)"}` }));
+    const chips = el("div", { class: "chips", style: "margin-top:8px" });
+    S.modules().forEach(m => {
+      const chip = el("div", { class: "chip" + (can.has(m.code) ? " on" : ""), onclick: () => {
+        if (can.has(m.code)) can.delete(m.code); else can.add(m.code);
+        S.setStaffCanTeach(st.id, [...can]); chip.classList.toggle("on");
+        details.querySelector("summary").textContent = `Can teach${can.size ? ` (${can.size})` : " — not set (no warnings)"}`;
+      }}, m.code);
+      chips.appendChild(chip);
+    });
+    details.appendChild(chips);
+    details.appendChild(el("p", { class: "muted small", style: "margin-top:6px", text: "If none selected, no warning fires. Once set, assigning them to a module outside this list shows a soft warning." }));
+    return details;
   }
   function addStaffPrompt() {
     let name = "";
@@ -979,7 +1079,7 @@
     S.modules().forEach(m => tb.appendChild(el("tr", { style: "cursor:pointer", onclick: () => openModuleModal(m.code) }, [
       td(m.code), td(m.name),
       el("td", {}, el("span", { class: "pill " + (m.agency === "CD" ? "cd" : "btc"), text: m.agency })),
-      td(m.elearning ? "Yes" : "—"), td(String(m.dives)),
+      td(m.elearn ? "Yes" : "—"), td(String(m.dives)),
       el("td", {}, [el("span", { class: "tag-medium m-" + m.medium }), " " + m.medium])
     ])));
     tbl.appendChild(tb); wrap.appendChild(tbl); root.appendChild(wrap);
@@ -987,27 +1087,30 @@
 
   function openModuleModal(code) {
     const existing = code ? S.moduleByCode(code) : null;
-    const m = existing ? { ...existing } : { code: "", name: "", agency: "CD", elearning: true, dives: 2, medium: "dive" };
+    const m = existing ? { ...existing } : { code: "", name: "", agency: "CD", elearn: "", dives: 2, medium: "dive", tmpl: null, kind: "taught" };
+    let hasEl = !!m.elearn;
     const body = [
       el("div", { class: "field-row" }, [
         field("Code", el("input", { value: m.code, oninput: e => m.code = e.target.value.toUpperCase() })),
         field("Name", el("input", { value: m.name, oninput: e => m.name = e.target.value }))
       ]),
       el("div", { class: "field-row" }, [
-        field("Certifying body", el("select", { onchange: e => { m.agency = e.target.value; if (m.agency === "BTC") m.elearning = false; } },
+        field("Certifying body", el("select", { onchange: e => { m.agency = e.target.value; if (m.agency === "BTC") hasEl = false; } },
           [["CD", "Conservation Diver"], ["BTC", "Black Turtle Conservation"]].map(([v, l]) => el("option", { value: v, selected: m.agency === v ? "selected" : null }, l)))),
         field("Default dives", el("input", { type: "number", value: m.dives, oninput: e => m.dives = Number(e.target.value) }))
       ]),
       el("div", { class: "field-row" }, [
         field("Medium", el("select", { onchange: e => m.medium = e.target.value },
           ["land", "snorkel", "dive"].map(x => el("option", { value: x, selected: m.medium === x ? "selected" : null }, x)))),
-        field("", checkbox("Has e-learning", m.elearning, v => m.elearning = v))
-      ])
+        field("Shared e-learning key (blank = its own / none)", el("input", { value: m.elearn || "", placeholder: "e.g. CORALTAX", oninput: e => m.elearn = e.target.value.toUpperCase().trim() }))
+      ]),
+      checkbox("Has e-learning", hasEl, v => hasEl = v)
     ];
     modal({ title: existing ? "Edit module" : "New module", body, actions: [
       { label: "Cancel", onClick: closeModal },
       { label: "Save", class: "btn-primary", onClick: () => {
         if (!m.code || !m.name) return toast("Code and name required");
+        m.elearn = hasEl ? (m.elearn || m.code) : null;
         S.saveModule(m); closeModal(); render(); }}
     ]});
   }
@@ -1057,16 +1160,14 @@
   function renderSettings(root) {
     root.appendChild(el("div", { class: "screen-head" }, el("h2", { text: "Settings" })));
     const up = S.settings().uploaders;
+    const names = S.settings().uploaderNames || {};
 
     root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
-      el("h3", { text: "Survey uploader links" }),
-      el("p", { class: "muted small", text: "Quick links to your survey apps. Confirm/paste the correct live URLs." }),
-      ...Object.entries(up).map(([k, url]) => el("div", { class: "field" }, [
-        el("label", { text: k.toUpperCase() }),
-        el("div", { class: "row" }, [
-          el("input", { value: url, oninput: e => S.setUploader(k, e.target.value), style: "flex:1" }),
-          el("a", { href: url, target: "_blank", class: "btn btn-sm", text: "Open ↗" })
-        ])
+      el("h3", { text: "Survey uploaders" }),
+      el("p", { class: "muted small", text: "Open the field survey apps." }),
+      ...Object.entries(up).map(([k, url]) => el("div", { class: "list-line" }, [
+        el("span", { text: names[k] || k.toUpperCase() }),
+        el("a", { href: url, target: "_blank", rel: "noopener", class: "btn btn-sm btn-primary", text: "Open ↗" })
       ]))
     ]));
 
@@ -1087,14 +1188,6 @@
         el("button", { class: "btn", onclick: importData }, "⬆ Import data"),
       ]),
       el("p", { class: "muted small", style: "margin-top:10px", text: "v1 stores data in this browser. Export regularly as a backup. Shared cross-device data comes when we connect the Supabase backend." })
-    ]));
-
-    root.appendChild(el("div", { class: "card" }, [
-      el("h3", { text: "Danger zone" }),
-      el("div", { class: "row" }, [
-        el("button", { class: "btn btn-danger", onclick: () => { if (confirm("Reset the course/module catalogue to defaults? Students and schedule are kept.")) { S.resetCatalogue(); render(); } } }, "Reset catalogue"),
-        el("button", { class: "btn btn-danger", onclick: () => { if (confirm("ERASE ALL DATA and re-seed? This cannot be undone.")) { S.hardReset(); location.reload(); } } }, "Erase everything")
-      ])
     ]));
   }
   function downloadText(text, name) {
