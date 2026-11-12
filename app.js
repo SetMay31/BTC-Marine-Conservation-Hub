@@ -581,9 +581,14 @@
       studentIds: [], diveSite: "", note: "", adhocType: "", adhocLabel: "", courseCode: "", moduleCode: ""
     };
 
+    // Whole taught modules are added via "+ Schedule module"; this modal is for
+    // flexible/ad-hoc dives and surveys. "module" only appears when editing an
+    // existing module section.
+    const kinds = ["adhoc", "survey"];
+    if (existing && se.kind === "module") kinds.push("module");
     const kindSel = el("select", { onchange: e => { se.kind = e.target.value; rebuild(); } },
-      ["adhoc", "survey", "module"].map(k => el("option", { value: k, selected: se.kind === k ? "selected" : null },
-        k === "adhoc" ? "Ad-hoc / flexible session" : k === "survey" ? "Conservation survey (staff only)" : "Module section")));
+      kinds.map(k => el("option", { value: k, selected: se.kind === k ? "selected" : null },
+        k === "adhoc" ? "Flexible / extra dive" : k === "survey" ? "Conservation survey (staff only)" : "Module section")));
 
     const specific = el("div");
     function rebuild() {
@@ -633,6 +638,7 @@
 
     const body = [
       field("Session type", kindSel),
+      !existing ? el("p", { class: "muted small", style: "margin-top:-6px", text: "To schedule a taught module (lecture + its dives), use “+ Schedule module” instead." }) : null,
       specific,
       el("div", { class: "field-row" }, [
         field("Date", el("input", { type: "date", value: se.date, oninput: e => se.date = e.target.value })),

@@ -1,5 +1,5 @@
 /* BTC Marine Conservation Hub — service worker (offline app shell) */
-const CACHE_VERSION = "btc-hub-v2";
+const CACHE_VERSION = "btc-hub-v3";
 const ASSETS = [
   "./", "./index.html", "./styles.css?v=2", "./data.js?v=2",
   "./store.js?v=2", "./app.js?v=2", "./manifest.json?v=2",
@@ -16,25 +16,15 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
-  // Network-first for page navigations (so a new version always wins when online);
-  // cache-first for versioned assets (fast + offline).
-  if (req.mode === "navigate") {
-    e.respondWith(
-      fetch(req).then(res => {
+  // Network-first for everything: always fresh when online, cache is the offline
+  // fallback. This removes the need to bump asset versions on every change.
+  e.respondWith(
+    fetch(req).then(res => {
+      if (res && res.ok && new URL(req.url).origin === location.origin) {
         const copy = res.clone();
         caches.open(CACHE_VERSION).then(c => c.put(req, copy));
-        return res;
-      }).catch(() => caches.match(req).then(c => c || caches.match("./index.html")))
-    );
-    return;
-  }
-  e.respondWith(
-    caches.match(req).then(cached => cached ||
-      fetch(req).then(res => {
-        const copy = res.clone();
-        if (res.ok && new URL(req.url).origin === location.origin)
-          caches.open(CACHE_VERSION).then(c => c.put(req, copy));
-        return res;
-      }).catch(() => cached))
+      }
+      return res;
+    }).catch(() => caches.match(req).then(c => c || (req.mode === "navigate" ? caches.match("./index.html") : undefined)))
   );
 });
