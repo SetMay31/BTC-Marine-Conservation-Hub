@@ -130,7 +130,7 @@ a { color: var(--accent-2); }
   box-shadow: 0 2px 12px rgba(0,0,0,0.14);
   padding-top: env(safe-area-inset-top);
 }
-.topbar-row { display: flex; align-items: center; gap: 14px; padding: 10px var(--pad); }
+.topbar-row { display: flex; align-items: center; gap: 14px; padding: 10px var(--pad); max-width: 1500px; width: 100%; margin: 0 auto; }
 .brand-mark { width: 52px; height: 52px; object-fit: contain; flex-shrink: 0; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-line-1 { font-weight: 700; font-size: 1.12rem; }
@@ -145,7 +145,7 @@ a { color: var(--accent-2); }
 .icon-btn:hover { background: rgba(255,255,255,0.26); }
 
 /* Tabs */
-.tabs { display: flex; gap: 2px; padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tabs { display: flex; gap: 2px; padding: 0 var(--pad); overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 1500px; width: 100%; margin: 0 auto; }
 .tab {
   background: transparent; border: 0; color: rgba(255,255,255,0.7);
   padding: 11px 15px; font-size: .9rem; font-weight: 600; cursor: pointer;
@@ -237,7 +237,8 @@ td.center, th.center { text-align: center; }
 
 /* ===== Schedule (week grid) ===== */
 .sched-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-.week-grid { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 8px; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.sess .s-title, .sess .s-meta { overflow-wrap: anywhere; }
 .day-col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-height: 120px; display: flex; flex-direction: column; }
 .day-col.today { border-color: var(--accent-2); box-shadow: 0 0 0 2px var(--accent-soft); }
 .day-head { padding: 8px 10px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: .8rem; display: flex; justify-content: space-between; align-items: center; }

@@ -290,7 +290,11 @@
       col.addEventListener("drop", e => {
         e.preventDefault();
         const id = e.dataTransfer.getData("text/plain");
-        if (id) { S.updateSession(id, { date: dISO }); render(); }
+        if (!id) return;
+        const s = S.sessions().find(x => x.id === id); if (!s) return;
+        const cs = conflictsFor({ ...s, date: dISO }, [id]);
+        if (cs.length) { toast("Can't move — " + conflictMsg(cs)); render(); return; }
+        S.updateSession(id, { date: dISO }); render();
       });
       col.appendChild(bodyEl);
       col.appendChild(el("button", { class: "btn btn-sm day-add", onclick: () => openSessionModal(null, dISO) }, "+ add"));
@@ -451,6 +455,32 @@
   }
   const byDateTime = (a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""));
 
+  /* ---------- double-booking prevention ---------- */
+  function timeOverlap(a, b) {
+    if (a.date !== b.date) return false;
+    const as = a.start || "00:00", ae = a.end || "23:59", bs = b.start || "00:00", be = b.end || "23:59";
+    return as < be && bs < ae;
+  }
+  // Clashes against existing sessions for the candidate's students or lead staff.
+  function conflictsFor(cand, ignoreIds = []) {
+    const res = [];
+    S.sessions().forEach(o => {
+      if (ignoreIds.includes(o.id)) return;
+      if (cand.id && o.id === cand.id) return;
+      if (cand.groupId && o.groupId && o.groupId === cand.groupId) return; // same module booking
+      if (!timeOverlap(cand, o)) return;
+      (cand.studentIds || []).forEach(id => {
+        if ((o.studentIds || []).includes(id)) res.push({ who: (S.studentById(id) || {}).name || "Student", other: o });
+      });
+      if (cand.staff && o.staff && cand.staff === o.staff) res.push({ who: cand.staff, other: o });
+    });
+    return res;
+  }
+  function conflictMsg(cs) {
+    const c = cs[0], o = c.other;
+    return `${c.who} is already booked: “${sessionTitle(o)}” on ${fmtDay(o.date)} ${o.start || ""}–${o.end || ""}`;
+  }
+
   /* ========================================================================
      SCHEDULE MODULE (whole module create)
      ===================================================================== */
@@ -559,10 +589,11 @@
           const rows = resolveTemplate(mod, { arOption, arProgramme });
           const groupId = S.uid("grp");
           let diveNum = 0, diveSiteIdx = 0, lastDay = 0;
+          const candidates = [];
           rows.forEach(r => {
             const isDive = r.type === "dive";
             const site = isDive ? (individualSites ? (sites["d" + diveSiteIdx] || "") : (sites.all || "")) : "";
-            S.addSession({
+            candidates.push({
               moduleCode, courseCode: "", groupId, staff: staffName, assist, shadow, surveyLead,
               studentIds: ids, kind: "module",
               date: addDays(date, r.day), start: r.start, end: r.end,
@@ -572,6 +603,11 @@
             if (isDive) diveSiteIdx++;
             lastDay = Math.max(lastDay, r.day);
           });
+          for (const cand of candidates) {
+            const cs = conflictsFor(cand);
+            if (cs.length) return toast("Can't schedule — " + conflictMsg(cs));
+          }
+          candidates.forEach(c => S.addSession(c));
           closeModal(); UI.schedView = "master"; UI.weekStart = mondayOf(date); render();
           toast(`Scheduled ${mod.name} (${lastDay + 1} day${lastDay ? "s" : ""})`);
         }}
@@ -673,6 +709,8 @@
     if (existing) actions.push({ label: "Delete", class: "btn-danger", onClick: () => {
       confirmDialog("Delete this session?", () => { S.deleteSession(existing.id); render(); }); }});
     actions.push({ label: existing ? "Save" : "Create", class: "btn-primary", onClick: () => {
+      const cs = conflictsFor(se, existing ? [existing.id] : []);
+      if (cs.length) return toast("Can't save — " + conflictMsg(cs));
       if (existing) S.updateSession(existing.id, se); else S.addSession(se);
       closeModal(); render();
     }});
@@ -753,12 +791,18 @@
         { label: "Apply to all", class: "btn-primary", onClick: () => {
           const offset = daysBetween(earliest, newStart);
           const ids = [...studentIds];
-          group.forEach(s => {
-            const patch = { staff, assist, shadow, surveyLead, studentIds: ids };
-            if (diveSite && s.section === "dive") patch.diveSite = diveSite;
-            if (offset !== 0) patch.date = addDays(s.date, offset);
-            S.updateSession(s.id, patch);
+          const groupIds = group.map(s => s.id);
+          const patched = group.map(s => {
+            const p = { ...s, staff, assist, shadow, surveyLead, studentIds: ids };
+            if (diveSite && s.section === "dive") p.diveSite = diveSite;
+            if (offset !== 0) p.date = addDays(s.date, offset);
+            return p;
           });
+          for (const cand of patched) {
+            const cs = conflictsFor(cand, groupIds);
+            if (cs.length) return toast("Can't apply — " + conflictMsg(cs));
+          }
+          patched.forEach(p => S.updateSession(p.id, { staff, assist, shadow, surveyLead, studentIds: ids, diveSite: p.diveSite, date: p.date }));
           closeModal(); render();
           toast("Whole module updated");
         }}
@@ -1101,13 +1145,13 @@
     const details = el("details", { style: "margin-top:10px" });
     const n = (st.canTeach || []).length;
     details.appendChild(el("summary", { style: "cursor:pointer;font-size:.82rem;font-weight:600;color:var(--ink-muted)",
-      text: `Can teach${n ? ` (${n})` : " — not set (no warnings)"}` }));
+      text: `Instructor Level${n ? ` (${n})` : " — not set (no warnings)"}` }));
     const chips = el("div", { class: "chips", style: "margin-top:8px" });
     S.modules().forEach(m => {
       const chip = el("div", { class: "chip" + (can.has(m.code) ? " on" : ""), onclick: () => {
         if (can.has(m.code)) can.delete(m.code); else can.add(m.code);
         S.setStaffCanTeach(st.id, [...can]); chip.classList.toggle("on");
-        details.querySelector("summary").textContent = `Can teach${can.size ? ` (${can.size})` : " — not set (no warnings)"}`;
+        details.querySelector("summary").textContent = `Instructor Level${can.size ? ` (${can.size})` : " — not set (no warnings)"}`;
       }}, m.code);
       chips.appendChild(chip);
     });
