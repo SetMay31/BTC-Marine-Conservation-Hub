@@ -355,6 +355,35 @@
     setTimeout(cleanup, 1500);
   }
 
+  // Printable calendar timetable for one student (Save as PDF from the print dialog).
+  function printStudentTimetable(stu) {
+    const sess = S.sessions().filter(s => (s.studentIds || []).includes(stu.id)).sort(byDateTime);
+    if (!sess.length && !stu.arrival) { toast("No schedule or dates to build a timetable for " + stu.name); return; }
+    const dates = sess.map(s => s.date);
+    const start = stu.arrival || (dates.length ? dates[0] : todayISO());
+    const end = stu.departure || (dates.length ? dates[dates.length - 1] : start);
+    const lastSun = addDays(mondayOf(end), 6);
+    const weeks = [];
+    for (let d = mondayOf(start); d <= lastSun; d = addDays(d, 7)) weeks.push(d);
+    const cellHtml = dISO => {
+      const dayNum = parseISO(dISO).getDate();
+      const items = sess.filter(s => s.date === dISO).sort(byDateTime)
+        .map(se => `<div class="pt-sess"><b>${esc(se.start || "")}</b> ${esc(sessionTitle(se))}</div>`).join("");
+      const inRange = dISO >= start && dISO <= end;
+      return `<td class="${inRange ? "" : "pt-out"}"><div class="pt-day">${dayNum} ${esc(MON[parseISO(dISO).getMonth()])}</div>${items}</td>`;
+    };
+    const rows = weeks.map(w => `<tr>${[0, 1, 2, 3, 4, 5, 6].map(i => cellHtml(addDays(w, i))).join("")}</tr>`).join("");
+    const sheet = el("div", { class: "print-sheet", html:
+      `<h2 style="margin:0 0 2px">${esc(stu.name)} — Timetable</h2>
+       <div style="margin-bottom:10px">${esc(fmtLong(start))} → ${esc(fmtLong(end))}${stu.departure ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
+       <table class="pt-cal"><thead><tr>${DOW.map(d => `<th>${d}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` });
+    document.body.appendChild(sheet);
+    const cleanup = () => { sheet.remove(); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    setTimeout(cleanup, 1500);
+  }
+
   function weekNav(onChange, label) {
     return el("div", { class: "sched-toolbar" }, [
       el("button", { class: "btn btn-sm", onclick: () => { UI.weekStart = addDays(UI.weekStart, -7); onChange(); } }, "‹ Prev"),
@@ -496,7 +525,10 @@
     const sv = UI.studentView === "calendar" ? "week" : UI.studentView;  // back-compat
     const svBtn = (k, label) => el("button", { class: "btn btn-sm" + (sv === k ? " btn-primary" : ""),
       onclick: () => { UI.studentView = k; render(); } }, label);
-    root.appendChild(el("div", { class: "sched-toolbar" }, [svBtn("list", "List"), svBtn("week", "Week"), svBtn("month", "Month")]));
+    root.appendChild(el("div", { class: "sched-toolbar" }, [
+      svBtn("list", "List"), svBtn("week", "Week"), svBtn("month", "Month"),
+      el("button", { class: "btn btn-sm", style: "margin-left:auto", onclick: () => printStudentTimetable(stu) }, "⤓ PDF timetable")
+    ]));
 
     if (!sess.length) { root.appendChild(el("div", { class: "empty", text: "No sessions scheduled for " + stu.name })); return; }
 
