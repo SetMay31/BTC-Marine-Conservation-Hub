@@ -50,6 +50,9 @@
     if (dISO === addDays(t, -1)) return "Yesterday";
     return fmtLong(dISO).replace(/ \d{4}$/, "");  // e.g. "Mon 17 Nov"
   }
+  const MONTHS_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function monthStartOf(dISO) { const d = parseISO(dISO); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; }
+  function addMonths(dISO, n) { const d = parseISO(dISO); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; }
 
   /* ---------- app state ---------- */
   const UI = {
@@ -60,7 +63,8 @@
     staffRosterDay: todayISO(),
     schedStudentId: null,
     certView: "grid",          // grid | cards
-    studentView: "list",       // list | calendar (inside student detail)
+    studentView: "list",       // list | week | month (student schedule)
+    studentMonth: null,        // month view's month (null = current)
     studentFilter: "current",  // current | all | pending | certified
     dashDay: null              // dashboard outings day (null = today)
   };
@@ -489,16 +493,16 @@
     if (!stu) { root.appendChild(el("div", { class: "empty", text: "Pick a student to see their schedule." })); return; }
 
     const sess = S.sessions().filter(s => (s.studentIds || []).includes(stu.id)).sort(byDateTime);
-    root.appendChild(el("div", { class: "sched-toolbar" }, [
-      el("button", { class: "btn btn-sm" + (UI.studentView === "list" ? " btn-primary" : ""),
-        onclick: () => { UI.studentView = "list"; render(); } }, "List"),
-      el("button", { class: "btn btn-sm" + (UI.studentView === "calendar" ? " btn-primary" : ""),
-        onclick: () => { UI.studentView = "calendar"; render(); } }, "Calendar")
-    ]));
+    const sv = UI.studentView === "calendar" ? "week" : UI.studentView;  // back-compat
+    const svBtn = (k, label) => el("button", { class: "btn btn-sm" + (sv === k ? " btn-primary" : ""),
+      onclick: () => { UI.studentView = k; render(); } }, label);
+    root.appendChild(el("div", { class: "sched-toolbar" }, [svBtn("list", "List"), svBtn("week", "Week"), svBtn("month", "Month")]));
 
     if (!sess.length) { root.appendChild(el("div", { class: "empty", text: "No sessions scheduled for " + stu.name })); return; }
 
-    if (UI.studentView === "list") {
+    if (sv === "month") { renderStudentMonth(root, stu, sess); return; }
+
+    if (sv === "list") {
       const wrap = el("div", { class: "table-wrap" });
       const tbl = el("table", {}, [el("thead", {}, el("tr", {}, [th("Date"), th("Time"), th("Module"), th("Staff")]))]);
       const tb = el("tbody");
@@ -524,6 +528,32 @@
       }
       root.appendChild(grid);
     }
+  }
+
+  function renderStudentMonth(root, stu, sess) {
+    const monthStart = UI.studentMonth || monthStartOf(todayISO());
+    const d0 = parseISO(monthStart);
+    root.appendChild(el("div", { class: "sched-toolbar" }, [
+      el("button", { class: "btn btn-sm", onclick: () => { UI.studentMonth = addMonths(monthStart, -1); render(); } }, "‹ Prev"),
+      el("button", { class: "btn btn-sm", onclick: () => { UI.studentMonth = monthStartOf(todayISO()); render(); } }, "This month"),
+      el("button", { class: "btn btn-sm", onclick: () => { UI.studentMonth = addMonths(monthStart, 1); render(); } }, "Next ›"),
+      el("strong", { text: `${MONTHS_FULL[d0.getMonth()]} ${d0.getFullYear()}` })
+    ]));
+    root.appendChild(el("div", { class: "month-grid" }, DOW.map(d => el("div", { class: "month-dow", text: d }))));
+    const firstMon = mondayOf(monthStart);
+    const grid = el("div", { class: "month-grid" });
+    for (let i = 0; i < 42; i++) {
+      const dISO = addDays(firstMon, i);
+      const inMonth = dISO.slice(0, 7) === monthStart.slice(0, 7);
+      const cell = el("div", { class: "month-cell" + (inMonth ? "" : " out") + (dISO === todayISO() ? " today" : "") }, [
+        el("div", { class: "month-daynum", text: String(parseISO(dISO).getDate()) })
+      ]);
+      sess.filter(s => s.date === dISO).sort(byDateTime).forEach(se => cell.appendChild(el("div", {
+        class: `month-sess m-${se.medium || "dive"}`, onclick: () => openSessionModal(se.id)
+      }, [el("span", { class: "ms-time", text: se.start || "" }), el("span", { class: "ms-title", text: sessionTitle(se) })])));
+      grid.appendChild(cell);
+    }
+    root.appendChild(grid);
   }
 
   /* ---------- session title helpers ---------- */

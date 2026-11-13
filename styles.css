@@ -317,6 +317,22 @@ td.center, th.center { text-align: center; }
 .empty { text-align: center; padding: 40px 20px; color: var(--ink-muted); }
 .warn-banner { background: rgba(201,123,92,0.12); border: 1px solid var(--warn); color: var(--warn); padding: 8px 12px; border-radius: 8px; font-size: .82rem; margin-bottom: 10px; }
 
+/* student month view */
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-bottom: 4px; }
+.month-dow { font-size: .72rem; color: var(--ink-muted); text-align: center; font-weight: 600; padding: 2px 0; }
+.month-cell { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; min-height: 88px; padding: 4px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+.month-cell.out { opacity: .4; }
+.month-cell.today { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-soft); }
+.month-daynum { font-size: .72rem; color: var(--ink-muted); font-weight: 600; }
+.month-sess { font-size: .64rem; line-height: 1.2; border-left: 3px solid var(--accent); border-radius: 4px; padding: 2px 4px; background: var(--surface-2); cursor: pointer; overflow: hidden; overflow-wrap: anywhere; }
+.month-sess.m-land { border-left-color: var(--land); background: var(--land-soft); }
+.month-sess.m-snorkel { border-left-color: var(--snorkel); background: var(--snorkel-soft); }
+.month-sess.m-dive { border-left-color: var(--dive); background: var(--dive-soft); }
+.month-sess.m-survey { border-left-color: var(--survey); background: var(--survey-soft); }
+.month-sess.m-adhoc { border-left-color: var(--adhoc); background: var(--adhoc-soft); }
+.month-sess .ms-time { font-weight: 700; margin-right: 3px; }
+.month-sess .ms-title { color: var(--ink-muted); }
+
 /* office day sheet print */
 .print-sheet { display: none; }
 @media print {
