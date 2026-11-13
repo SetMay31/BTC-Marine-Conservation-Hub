@@ -92,10 +92,24 @@ const Store = (() => {
     }
     state.staff.forEach(s => { if (!s.canTeach) s.canTeach = []; });
   }
-  function save() {
+  // --- undo (in-memory history of pre-change snapshots) ---
+  let undoStack = [];
+  function persist() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn(e); }
     subs.forEach(fn => { try { fn(); } catch (e) {} });
   }
+  function save() {
+    try { const prev = localStorage.getItem(KEY); if (prev) { undoStack.push(prev); if (undoStack.length > 50) undoStack.shift(); } }
+    catch (e) {}
+    persist();
+  }
+  function undo() {
+    if (!undoStack.length) return false;
+    try { state = JSON.parse(undoStack.pop()); } catch (e) { return false; }
+    persist();
+    return true;
+  }
+  const canUndo = () => undoStack.length > 0;
   const subscribe = fn => subs.push(fn);
 
   // ---- getters ----
@@ -278,7 +292,7 @@ const Store = (() => {
   load();
 
   return {
-    uid, get, save, subscribe,
+    uid, get, save, subscribe, undo, canUndo,
     modules, diveComponents, courses, staff, students, sessions, settings, template,
     moduleByCode, diveCompByCode, courseByCode, staffById, studentById,
     programChain, courseModuleCodes, courseDiveComps, courseExtras,

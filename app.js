@@ -90,6 +90,9 @@
     window.addEventListener("online", updateNet);
     window.addEventListener("offline", updateNet);
     updateNet();
+    $("#undo-btn").addEventListener("click", () => {
+      if (S.undo()) { render(); toast("Undone"); } else toast("Nothing to undo");
+    });
   }
   function updateNet() { $("#net-dot").classList.toggle("off", !navigator.onLine); }
 
@@ -711,8 +714,13 @@
     actions.push({ label: existing ? "Save" : "Create", class: "btn-primary", onClick: () => {
       const cs = conflictsFor(se, existing ? [existing.id] : []);
       if (cs.length) return toast("Can't save — " + conflictMsg(cs));
-      if (existing) S.updateSession(existing.id, se); else S.addSession(se);
-      closeModal(); render();
+      const doSave = () => {
+        if (existing) S.updateSession(existing.id, se); else S.addSession(se);
+        closeModal(); render();
+      };
+      if (existing && se.kind === "module") {
+        confirmDialog("Are you sure you want to edit just this one segment of the module? To change the whole module at once, use “Edit the whole module”.", doSave, "Edit this segment", false);
+      } else doSave();
     }});
 
     modal({ title: existing ? "Edit session" : "New session", body, actions, wide: true });
