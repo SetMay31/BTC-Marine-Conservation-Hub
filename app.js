@@ -53,7 +53,8 @@
     staffRosterDay: todayISO(),
     schedStudentId: null,
     certView: "grid",          // grid | cards
-    studentView: "list"        // list | calendar (inside student detail)
+    studentView: "list",       // list | calendar (inside student detail)
+    studentFilter: "current"   // current | all | pending | certified
   };
 
   /* ================= GATE ================= */
@@ -250,6 +251,7 @@
     root.appendChild(el("div", { class: "spread screen-head" }, [
       el("h2", { text: "Schedule" }),
       el("div", { class: "row" }, [
+        el("button", { class: "btn", onclick: openDaySheet }, "🖨 Day sheet"),
         el("button", { class: "btn btn-primary", onclick: openScheduleModule }, "+ Schedule module"),
         el("button", { class: "btn", onclick: () => openSessionModal(null) }, "+ Session / survey")
       ])
@@ -268,6 +270,64 @@
     if (UI.schedView === "master") renderMaster(root);
     else if (UI.schedView === "staff") renderStaffSchedule(root);
     else renderStudentSchedule(root);
+  }
+
+  // Office day sheet: a printable / exportable list of a day's outings.
+  function daySessions(dISO) { return S.sessions().filter(s => s.date === dISO).sort(byDateTime); }
+  function sessionStudents(se) { return (se.studentIds || []).map(id => (S.studentById(id) || {}).name).filter(Boolean).join(", "); }
+  function openDaySheet() {
+    let d = todayISO();
+    const preview = el("div");
+    function build() {
+      preview.innerHTML = "";
+      const sess = daySessions(d);
+      if (!sess.length) { preview.appendChild(el("p", { class: "muted small", text: "Nothing scheduled this day." })); return; }
+      const tbl = el("table", {}, [el("thead", {}, el("tr", {}, [th("Time"), th("Session"), th("Staff"), th("Students"), th("Dive site")]))]);
+      const tb = el("tbody");
+      sess.forEach(se => tb.appendChild(el("tr", {}, [
+        td(`${se.start || ""}${se.end ? "–" + se.end : ""}`), tdMedium(se), td(se.staff || "—"),
+        td(sessionStudents(se) || "—"), td(se.diveSite || "—")
+      ])));
+      tbl.appendChild(tb);
+      preview.appendChild(el("div", { class: "table-wrap" }, tbl));
+    }
+    build();
+    modal({
+      title: "Office day sheet", wide: true,
+      body: [
+        field("Date", el("input", { type: "date", value: d, oninput: e => { d = e.target.value; build(); } })),
+        preview,
+        el("p", { class: "muted small", text: "Print for the office, or download as CSV. Shows each outing's time, module, staff, students and dive site." })
+      ],
+      actions: [
+        { label: "Close", onClick: closeModal },
+        { label: "⬇ CSV", onClick: () => exportDayCSV(d) },
+        { label: "🖨 Print", class: "btn-primary", onClick: () => printDaySheet(d) }
+      ]
+    });
+  }
+  function exportDayCSV(d) {
+    const rows = [["Time", "Session", "Staff", "Students", "Dive site"]];
+    daySessions(d).forEach(se => rows.push([
+      `${se.start || ""}${se.end ? "-" + se.end : ""}`, sessionTitle(se), se.staff || "", sessionStudents(se), se.diveSite || ""
+    ]));
+    downloadCSV(rows, `btc-day-schedule-${d}.csv`);
+  }
+  function printDaySheet(d) {
+    const sess = daySessions(d);
+    const rowsHtml = sess.length ? sess.map(se =>
+      `<tr><td>${esc(se.start || "")}${se.end ? "–" + esc(se.end) : ""}</td><td>${esc(sessionTitle(se))}</td><td>${esc(se.staff || "—")}</td><td>${esc(sessionStudents(se) || "—")}</td><td>${esc(se.diveSite || "—")}</td></tr>`
+    ).join("") : `<tr><td colspan="5">Nothing scheduled.</td></tr>`;
+    const sheet = el("div", { class: "print-sheet", html:
+      `<h2 style="margin:0 0 4px">BTC Marine Conservation — Day Schedule</h2>
+       <div style="margin-bottom:12px">${esc(fmtLong(d))}</div>
+       <table><thead><tr><th>Time</th><th>Session</th><th>Staff</th><th>Students</th><th>Dive site</th></tr></thead>
+       <tbody>${rowsHtml}</tbody></table>` });
+    document.body.appendChild(sheet);
+    const cleanup = () => { sheet.remove(); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    setTimeout(cleanup, 1500);
   }
 
   function weekNav(onChange, label) {
@@ -521,7 +581,7 @@
     const selectedStudents = new Set();
     if (preset && preset.studentId) selectedStudents.add(preset.studentId);
 
-    const moduleSel = el("select", { onchange: e => { moduleCode = e.target.value; refreshStudents(); rebuildAR(); rebuildSites(); } },
+    const moduleSel = el("select", { onchange: e => { moduleCode = e.target.value; refreshStudents(); rebuildAR(); rebuildSites(); checkModClashes(); } },
       [el("option", { value: "" }, "— choose a module —"),
        ...S.modules().map(m => el("option", { value: m.code }, `${m.name} (${m.agency})`))]);
     if (moduleCode) moduleSel.value = moduleCode;
@@ -535,7 +595,7 @@
       eligible.forEach(s => {
         const certified = s.certs && s.certs[moduleCode] && s.certs[moduleCode].issued;
         const chip = el("div", { class: "chip" + (certified ? " warnflag" : "") + (selectedStudents.has(s.id) ? " on" : ""),
-          onclick: () => { if (selectedStudents.has(s.id)) { selectedStudents.delete(s.id); chip.classList.remove("on"); } else { selectedStudents.add(s.id); chip.classList.add("on"); } }
+          onclick: () => { if (selectedStudents.has(s.id)) { selectedStudents.delete(s.id); chip.classList.remove("on"); } else { selectedStudents.add(s.id); chip.classList.add("on"); } checkModClashes(); }
         }, s.name + (certified ? " ✓already" : ""));
         studentsBox.appendChild(chip);
       });
@@ -548,10 +608,10 @@
       const mod = S.moduleByCode(moduleCode);
       if (mod && mod.tmpl === "AR") {
         arBox.appendChild(field("Day 1 afternoon", el("div", { class: "chips" }, [
-          chipToggle("Artificial Reefs Dives", arOption === "dives", () => { arOption = "dives"; rebuildAR(); rebuildSites(); }),
-          chipToggle("Workshop Day", arOption === "workshop", () => { arOption = "workshop"; rebuildAR(); rebuildSites(); })
+          chipToggle("Artificial Reefs Dives", arOption === "dives", () => { arOption = "dives"; rebuildAR(); rebuildSites(); checkModClashes(); }),
+          chipToggle("Workshop Day", arOption === "workshop", () => { arOption = "workshop"; rebuildAR(); rebuildSites(); checkModClashes(); })
         ])));
-        arBox.appendChild(checkbox("Part of a programme (adds Day 2 morning dives)", arProgramme, v => { arProgramme = v; rebuildSites(); }));
+        arBox.appendChild(checkbox("Part of a programme (adds Day 2 morning dives)", arProgramme, v => { arProgramme = v; rebuildSites(); checkModClashes(); }));
       }
     }
     rebuildAR();
@@ -571,20 +631,49 @@
     }
     rebuildSites();
 
+    function buildCandidates(groupId) {
+      const mod = S.moduleByCode(moduleCode); if (!mod) return [];
+      const ids = [...selectedStudents];
+      const rows = resolveTemplate(mod, { arOption, arProgramme });
+      let diveNum = 0, diveSiteIdx = 0;
+      return rows.map(r => {
+        const isDive = r.type === "dive";
+        const site = isDive ? (individualSites ? (sites["d" + diveSiteIdx] || "") : (sites.all || "")) : "";
+        if (isDive) diveSiteIdx++;
+        return {
+          moduleCode, courseCode: "", groupId, staff: staffName, assist, shadow, surveyLead,
+          studentIds: ids, kind: "module",
+          date: addDays(date, r.day), start: r.start, end: r.end,
+          section: isDive ? "dive" : "lecture", medium: isDive ? (mod.medium || "dive") : "land",
+          name: r.name, block: r.block || null, diveIndex: isDive ? ++diveNum : null, diveSite: site
+        };
+      });
+    }
+    const modClashEl = el("div");
+    function checkModClashes() {
+      modClashEl.innerHTML = "";
+      if (!moduleCode) return;
+      for (const cand of buildCandidates("tmp")) {
+        const cs = conflictsFor(cand);
+        if (cs.length) { modClashEl.appendChild(el("div", { class: "warn-banner", text: "⚠ Clash: " + conflictMsg(cs) })); return; }
+      }
+    }
+
     const body = [
       field("Module", moduleSel),
       arBox,
       field("Eligible students (only those enrolled in a course that includes this module)", studentsBox),
-      field("Lead staff", staffSelect(v => staffName = v)),
+      field("Lead staff", staffSelect(v => { staffName = v; checkModClashes(); })),
       el("div", { class: "field-row" }, [
         field("Assist (optional)", el("input", { placeholder: "name", oninput: e => assist = e.target.value })),
         field("Shadow (optional)", el("input", { placeholder: "name", oninput: e => shadow = e.target.value }))
       ]),
       el("div", { class: "field-row" }, [
         field("Survey Lead (optional)", el("input", { placeholder: "name", oninput: e => surveyLead = e.target.value })),
-        field("Start date", el("input", { type: "date", value: date, oninput: e => date = e.target.value }))
+        field("Start date", el("input", { type: "date", value: date, oninput: e => { date = e.target.value; checkModClashes(); } }))
       ]),
       sitesBox,
+      modClashEl,
       el("p", { class: "muted small", text: "Lays out the module's lecture(s) and dives per its template. Every section is movable afterwards, and you can adjust staff/students per section." })
     ];
 
@@ -595,34 +684,19 @@
         { label: "Create sessions", class: "btn-primary", onClick: () => {
           if (!moduleCode) return toast("Choose a module");
           const mod = S.moduleByCode(moduleCode);
-          const ids = [...selectedStudents];
-          const rows = resolveTemplate(mod, { arOption, arProgramme });
-          const groupId = S.uid("grp");
-          let diveNum = 0, diveSiteIdx = 0, lastDay = 0;
-          const candidates = [];
-          rows.forEach(r => {
-            const isDive = r.type === "dive";
-            const site = isDive ? (individualSites ? (sites["d" + diveSiteIdx] || "") : (sites.all || "")) : "";
-            candidates.push({
-              moduleCode, courseCode: "", groupId, staff: staffName, assist, shadow, surveyLead,
-              studentIds: ids, kind: "module",
-              date: addDays(date, r.day), start: r.start, end: r.end,
-              section: isDive ? "dive" : "lecture", medium: isDive ? (mod.medium || "dive") : "land",
-              name: r.name, block: r.block || null, diveIndex: isDive ? ++diveNum : null, diveSite: site
-            });
-            if (isDive) diveSiteIdx++;
-            lastDay = Math.max(lastDay, r.day);
-          });
+          const candidates = buildCandidates(S.uid("grp"));
           for (const cand of candidates) {
             const cs = conflictsFor(cand);
             if (cs.length) return toast("Can't schedule — " + conflictMsg(cs));
           }
+          const lastDay = Math.max(0, ...candidates.map(c => daysBetween(date, c.date)));
           candidates.forEach(c => S.addSession(c));
           closeModal(); UI.schedView = "master"; UI.weekStart = mondayOf(date); render();
           toast(`Scheduled ${mod.name} (${lastDay + 1} day${lastDay ? "s" : ""})`);
         }}
       ], wide: true
     });
+    checkModClashes();
   }
   function chipToggle(label, on, onClick) {
     return el("div", { class: "chip" + (on ? " on" : ""), onclick: onClick }, label);
@@ -639,7 +713,13 @@
       studentIds: [], diveSite: "", note: "", adhocType: "", adhocLabel: "", courseCode: "", moduleCode: ""
     }, preset || {});
     if (!se.end) se.end = addHoursHHMM(se.start || "07:00", 4);
-    const endInput = el("input", { type: "time", value: se.end, oninput: e => se.end = e.target.value });
+    const clashEl = el("div");
+    function checkClashes() {
+      clashEl.innerHTML = "";
+      const cs = conflictsFor(se, existing ? [existing.id] : []);
+      if (cs.length) clashEl.appendChild(el("div", { class: "warn-banner", text: "⚠ Clash: " + conflictMsg(cs) }));
+    }
+    const endInput = el("input", { type: "time", value: se.end, oninput: e => { se.end = e.target.value; checkClashes(); } });
 
     // Whole taught modules are added via "+ Schedule module"; this modal is for
     // flexible/ad-hoc dives and surveys. "module" only appears when editing an
@@ -690,6 +770,7 @@
           if (se.studentIds.includes(s.id)) se.studentIds = se.studentIds.filter(x => x !== s.id);
           else se.studentIds.push(s.id);
           chip.classList.toggle("on");
+          checkClashes();
         }}, s.name);
         studentsBox.appendChild(chip);
       });
@@ -702,15 +783,17 @@
       field("Session type", kindSel),
       !existing ? el("p", { class: "muted small", style: "margin-top:-6px", text: "To schedule a taught module (lecture + its dives), use “+ Schedule module” instead." }) : null,
       specific,
-      field("Date", el("input", { type: "date", value: se.date, oninput: e => se.date = e.target.value })),
+      field("Date", el("input", { type: "date", value: se.date, oninput: e => { se.date = e.target.value; checkClashes(); } })),
       el("div", { class: "field-row" }, [
         field("Start", el("input", { type: "time", value: se.start, oninput: e => {
           se.start = e.target.value;
           if (!se.end || se.end <= se.start) { se.end = addHoursHHMM(se.start, 4); endInput.value = se.end; }
+          checkClashes();
         }})),
         field("End", endInput)
       ]),
-      field("Lead staff" + (se.kind === "adhoc" ? " (optional)" : ""), staffSelect(v => se.staff = v, se.staff)),
+      clashEl,
+      field("Lead staff" + (se.kind === "adhoc" ? " (optional)" : ""), staffSelect(v => { se.staff = v; checkClashes(); }, se.staff)),
       el("div", { class: "field-row" }, [
         field("Assist", el("input", { value: se.assist || "", oninput: e => se.assist = e.target.value })),
         field("Shadow", el("input", { value: se.shadow || "", oninput: e => se.shadow = e.target.value }))
@@ -743,7 +826,9 @@
     // react to kind change for students visibility
     kindSel.addEventListener("change", () => {
       sf.innerHTML = ""; if (se.kind !== "survey") { buildStudents(); sf.appendChild(field("Students", studentsBox)); }
+      checkClashes();
     });
+    checkClashes();
   }
 
   function staffSelect(onChange, current = "") {
@@ -838,13 +923,37 @@
   /* ========================================================================
      STUDENTS
      ===================================================================== */
+  function isCurrent(s) {
+    if (s.archived) return false;
+    const t = todayISO();
+    if (s.arrival && s.arrival > t) return false;
+    if (s.departure && s.departure < t) return false;
+    return true;
+  }
+  function isCertified(s) { const p = S.courseProgress(s); return p.total > 0 && p.certified === p.total; }
+
   function renderStudents(root) {
     root.appendChild(el("div", { class: "spread screen-head" }, [
       el("h2", { text: "Students" }),
       el("button", { class: "btn btn-primary", onclick: () => openStudentModal(null) }, "+ Add student")
     ]));
-    const list = S.students();
-    if (!list.length) { root.appendChild(el("div", { class: "empty", text: "No students yet. Add your first student to begin." })); return; }
+    if (!S.students(true).length) { root.appendChild(el("div", { class: "empty", text: "No students yet. Add your first student to begin." })); return; }
+
+    // filter toggle
+    const filters = [["current", "Current"], ["all", "All"], ["pending", "Pending"], ["certified", "Certified"]];
+    root.appendChild(el("div", { class: "sched-toolbar" }, filters.map(([k, label]) =>
+      el("button", { class: "btn btn-sm" + (UI.studentFilter === k ? " btn-primary" : ""),
+        onclick: () => { UI.studentFilter = k; render(); } }, label))));
+
+    const base = UI.studentFilter === "all" ? S.students(true) : S.students();
+    const list = base.filter(s => {
+      if (UI.studentFilter === "current") return isCurrent(s);
+      if (UI.studentFilter === "certified") return isCertified(s);
+      if (UI.studentFilter === "pending") return !isCertified(s);
+      return true;
+    });
+    if (!list.length) { root.appendChild(el("div", { class: "empty", text: "No students in this view." })); return; }
+
     const cardIndex = [];
     const noHits = el("div", { class: "muted small hidden", text: "No students match your search." });
     root.appendChild(el("input", { placeholder: "Search by name, email or course…", style: "max-width:340px;margin-bottom:14px",
@@ -857,7 +966,7 @@
     const grid = el("div", { class: "grid-cards" });
     list.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
       const prog = S.courseProgress(s);
-      const card = el("div", { class: "card", style: "cursor:pointer", onclick: () => openStudentModal(s.id) }, [
+      const card = el("div", { class: "card", style: "cursor:pointer" + (s.archived ? ";opacity:.7" : ""), onclick: () => openStudentModal(s.id) }, [
         el("div", { class: "spread" }, [
           el("h3", { text: s.name, style: "margin:0" }),
           el("span", { class: "pill", text: `${prog.certified}/${prog.total}` })
@@ -865,6 +974,8 @@
         el("div", { class: "muted small", text: courseBadgeText(s) || "No course" }),
         el("div", { class: "progress-bar", style: "margin:8px 0" }, el("i", { style: `width:${prog.pct}%` })),
         el("div", { class: "row small" }, [
+          isCurrent(s) ? el("span", { class: "pill good", text: "● Current" }) : null,
+          s.archived ? el("span", { class: "pill muted2", text: "archived" }) : null,
           s.startLevel && s.startLevel.cert ? el("span", { class: "pill muted2", text: s.startLevel.cert }) : null,
           complianceMissing(s) ? el("span", { class: "pill warn", text: "⚠ " + complianceMissing(s) }) : el("span", { class: "pill good", text: "✓ compliance" })
         ])
@@ -874,18 +985,6 @@
     });
     root.appendChild(grid);
     root.appendChild(noHits);
-
-    // archived
-    const archived = S.students(true).filter(s => s.archived);
-    if (archived.length) {
-      root.appendChild(el("h3", { style: "margin-top:22px", text: `Archived (${archived.length})` }));
-      const ag = el("div", { class: "grid-cards" });
-      archived.forEach(s => ag.appendChild(el("div", { class: "card", onclick: () => openStudentModal(s.id), style: "cursor:pointer;opacity:.75" }, [
-        el("div", { class: "spread" }, [el("h3", { text: s.name, style: "margin:0" }), el("span", { class: "pill", text: "archived" })]),
-        el("div", { class: "muted small", text: courseBadgeText(s) })
-      ])));
-      root.appendChild(ag);
-    }
   }
 
   function courseBadgeText(s) {
@@ -904,21 +1003,37 @@
     s.startLevel = s.startLevel || { cert: "", loggedDives: "", priorModules: [] };
     s.compliance = s.compliance || { medical: false, waiver: false, cdPaperwork: false };
 
-    // enrolment chips
-    const enrolBox = el("div", { class: "chips" });
+    // enrolment chips — grouped by kind, with a search filter
+    let enrolQuery = "";
+    const enrolChips = el("div");
     function buildEnrol() {
-      enrolBox.innerHTML = "";
-      S.courses().filter(c => c.kind !== "survey").forEach(c => {
-        const on = (s.courses || []).includes(c.code);
-        enrolBox.appendChild(el("div", { class: "chip" + (on ? " on" : ""), onclick: () => {
-          s.courses = s.courses || [];
-          if (s.courses.includes(c.code)) s.courses = s.courses.filter(x => x !== c.code);
-          else s.courses.push(c.code);
-          buildEnrol();
-        }}, c.name));
+      enrolChips.innerHTML = "";
+      const kinds = [["program", "Programmes"], ["pack", "Packs"], ["single", "Single courses"], ["day", "Day courses"], ["addon", "Add-ons"]];
+      let any = false;
+      kinds.forEach(([k, label]) => {
+        const cs = S.courses().filter(c => c.kind === k && c.name.toLowerCase().includes(enrolQuery));
+        if (!cs.length) return;
+        any = true;
+        enrolChips.appendChild(el("div", { class: "small muted", style: "margin:10px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.03em", text: label }));
+        const row = el("div", { class: "chips" });
+        cs.forEach(c => {
+          const on = (s.courses || []).includes(c.code);
+          row.appendChild(el("div", { class: "chip" + (on ? " on" : ""), onclick: () => {
+            s.courses = s.courses || [];
+            if (s.courses.includes(c.code)) s.courses = s.courses.filter(x => x !== c.code);
+            else s.courses.push(c.code);
+            buildEnrol();
+          }}, c.name));
+        });
+        enrolChips.appendChild(row);
       });
+      if (!any) enrolChips.appendChild(el("div", { class: "small muted", text: "No courses match." }));
     }
     buildEnrol();
+    const enrolBox = el("div", {}, [
+      el("input", { placeholder: "Search courses…", style: "max-width:320px;margin-bottom:4px", oninput: e => { enrolQuery = e.target.value.toLowerCase(); buildEnrol(); } }),
+      enrolChips
+    ]);
 
     const diveLevels = S.settings().diveLevels;
     const diveWarnEl = el("div");
@@ -1183,6 +1298,35 @@
     toast("Exported " + name);
   }
 
+  /* ---------- reports ---------- */
+  function exportElearningOutstanding() {
+    const rows = [["Student", "Email", "Module", "Agency", "Dives booked?"]];
+    S.students().forEach(s => S.studentModuleCodes(s).forEach(mc => {
+      const mod = S.moduleByCode(mc); if (!mod || !mod.elearn) return;
+      if (s.elearning && s.elearning[mod.elearn]) return;
+      const booked = S.studentModuleSessions(s.id, mc).some(se => se.date >= todayISO());
+      rows.push([s.name, s.email || "", mod.name, mod.agency, booked ? "yes — upcoming" : "no"]);
+    }));
+    downloadCSV(rows, "btc-elearning-outstanding.csv");
+  }
+  function exportInstructorWorkload() {
+    const today = todayISO();
+    const counts = {};
+    S.staff().forEach(st => counts[st.name] = { upcoming: 0, total: 0 });
+    S.sessions().forEach(se => { if (se.staff && counts[se.staff]) { counts[se.staff].total++; if (se.date >= today) counts[se.staff].upcoming++; } });
+    const rows = [["Staff", "Upcoming sessions", "Total sessions"]];
+    Object.entries(counts).forEach(([name, c]) => rows.push([name, c.upcoming, c.total]));
+    downloadCSV(rows, "btc-instructor-workload.csv");
+  }
+  function exportCertsThisMonth() {
+    const m = todayISO().slice(0, 7);
+    const rows = [["Student", "Module", "Date certified", "Certified by"]];
+    S.students(true).forEach(s => Object.entries(s.certs || {}).forEach(([mc, c]) => {
+      if (c.issued && c.date && c.date.slice(0, 7) === m) { const mod = S.moduleByCode(mc); rows.push([s.name, mod ? mod.name : mc, c.date, c.staff || ""]); }
+    }));
+    downloadCSV(rows, `btc-certifications-${m}.csv`);
+  }
+
   /* ========================================================================
      STAFF (admin: list + OFF periods)
      ===================================================================== */
@@ -1387,6 +1531,16 @@
         el("span", { text: names[k] || k.toUpperCase() }),
         el("a", { href: url, target: "_blank", rel: "noopener", class: "btn btn-sm btn-primary", text: "Open ↗" })
       ]))
+    ]));
+
+    root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
+      el("h3", { text: "Reports" }),
+      el("p", { class: "muted small", text: "Download CSV reports." }),
+      el("div", { class: "row" }, [
+        el("button", { class: "btn", onclick: exportElearningOutstanding }, "⬇ E-learning outstanding"),
+        el("button", { class: "btn", onclick: exportInstructorWorkload }, "⬇ Instructor workload"),
+        el("button", { class: "btn", onclick: exportCertsThisMonth }, "⬇ Certifications this month")
+      ])
     ]));
 
     let newPw = "";
