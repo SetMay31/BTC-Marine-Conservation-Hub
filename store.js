@@ -80,17 +80,32 @@ const Store = (() => {
     catch (e) { console.warn(e); }
     state = seed(); save();
   }
+  // Stores at/above this version KEEP their in-app catalogue edits across updates.
+  // Only a store older than the baseline is reseeded (one-time catch-up), and
+  // only a deliberate bump of this number ever force-refreshes the catalogue.
+  const CATALOGUE_BASELINE = 5;
   function migrate() {
-    // If an older (v3) store is present, re-seed the catalogue but keep students/sessions.
-    if (!state.meta || state.meta.version < window.SEED.version) {
+    const stored = (state.meta && state.meta.version) || 0;
+    if (stored < CATALOGUE_BASELINE) {
+      // one-time catch-up: adopt the current catalogue, keep students/sessions/password
       const fresh = seed();
-      const keptStudents = state.students || [];
-      const keptSessions = state.sessions || [];
-      const keptPw = (state.settings && state.settings.password) || fresh.settings.password;
-      state = fresh; state.students = keptStudents; state.sessions = keptSessions;
-      state.settings.password = keptPw; save();
+      fresh.students = state.students || [];
+      fresh.sessions = state.sessions || [];
+      if (state.settings && state.settings.password) fresh.settings.password = state.settings.password;
+      state = fresh; persist();
+      return;
     }
+    // at/above baseline: preserve the catalogue and every edit; patch structure only
+    const def = seed();
+    if (!state.meta) state.meta = {};
+    state.meta.version = window.SEED.version;
+    state.settings = state.settings || def.settings;
+    state.diveComponents = state.diveComponents || def.diveComponents;
+    state.staff = state.staff || [];
     state.staff.forEach(s => { if (!s.canTeach) s.canTeach = []; });
+    state.students = state.students || [];
+    state.sessions = state.sessions || [];
+    persist();
   }
   // --- undo (in-memory history of pre-change snapshots) ---
   let undoStack = [];
