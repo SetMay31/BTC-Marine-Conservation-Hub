@@ -146,7 +146,8 @@ const Store = (() => {
     }
     if (course.kind === "program") {
       const set = new Set();
-      programChain(course.code).forEach(p => (p.moduleCodes || []).forEach(m => set.add(m)));
+      // base-first (chronological): CC → CS → RS → MC → SD
+      programChain(course.code).reverse().forEach(p => (p.moduleCodes || []).forEach(m => set.add(m)));
       return [...set];
     }
     return course.moduleCodes || [];
