@@ -179,6 +179,20 @@ const Store = (() => {
     }
     return course.diveComps || [];
   }
+  // Ordered curriculum items (taught modules + dive components) in sequence:
+  // base-first, and within each level modules then that level's dive components.
+  function courseItemsOrdered(course) {
+    const out = [];
+    const pushLevel = p => {
+      (p.moduleCodes || []).forEach(mc => { const m = moduleByCode(mc); out.push({ kind: "module", code: mc, name: m ? m.name : mc }); });
+      (p.diveComps || []).forEach(dc => { const d = diveCompByCode(dc); out.push({ kind: "dive", code: dc, name: d ? d.name : dc }); });
+    };
+    if (!course) return out;
+    if (course.kind === "program") programChain(course.code).reverse().forEach(pushLevel);
+    else if (course.kind === "pack") course.packOf.forEach(pc => courseItemsOrdered(courseByCode(pc)).forEach(it => out.push(it)));
+    else (course.moduleCodes || []).forEach(mc => { const m = moduleByCode(mc); out.push({ kind: "module", code: mc, name: m ? m.name : mc }); });
+    return out;
+  }
   function courseExtras(course) {
     if (course && course.kind === "program") {
       let out = []; programChain(course.code).forEach(p => { if (p.extras) out = out.concat(p.extras); }); return out;
@@ -311,7 +325,7 @@ const Store = (() => {
     uid, get, save, subscribe, undo, canUndo,
     modules, diveComponents, courses, staff, students, sessions, settings, template,
     moduleByCode, diveCompByCode, courseByCode, staffById, studentById,
-    programChain, courseModuleCodes, courseDiveComps, courseExtras,
+    programChain, courseModuleCodes, courseDiveComps, courseItemsOrdered, courseExtras,
     studentModuleCodes, studentDiveReqs, studentExtras,
     studentModuleSessions, studentCompSessions,
     moduleStatus, diveReqStatus, courseProgress, staffOff, staffCanTeach,
