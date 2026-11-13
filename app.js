@@ -514,15 +514,17 @@
     return rows;
   }
 
-  function openScheduleModule() {
-    let moduleCode = "", date = todayISO(), staffName = "", assist = "", shadow = "", surveyLead = "";
+  function openScheduleModule(preset) {
+    let moduleCode = (preset && preset.moduleCode) || "", date = todayISO(), staffName = "", assist = "", shadow = "", surveyLead = "";
     let arOption = "dives", arProgramme = true, individualSites = false;
     const sites = {};               // all | d0,d1,...
     const selectedStudents = new Set();
+    if (preset && preset.studentId) selectedStudents.add(preset.studentId);
 
     const moduleSel = el("select", { onchange: e => { moduleCode = e.target.value; refreshStudents(); rebuildAR(); rebuildSites(); } },
       [el("option", { value: "" }, "— choose a module —"),
        ...S.modules().map(m => el("option", { value: m.code }, `${m.name} (${m.agency})`))]);
+    if (moduleCode) moduleSel.value = moduleCode;
 
     const studentsBox = el("div", { class: "chips" });
     function refreshStudents() {
@@ -532,7 +534,7 @@
       if (!eligible.length) { studentsBox.appendChild(el("span", { class: "muted small", text: "No enrolled students need this module." })); return; }
       eligible.forEach(s => {
         const certified = s.certs && s.certs[moduleCode] && s.certs[moduleCode].issued;
-        const chip = el("div", { class: "chip" + (certified ? " warnflag" : ""),
+        const chip = el("div", { class: "chip" + (certified ? " warnflag" : "") + (selectedStudents.has(s.id) ? " on" : ""),
           onclick: () => { if (selectedStudents.has(s.id)) { selectedStudents.delete(s.id); chip.classList.remove("on"); } else { selectedStudents.add(s.id); chip.classList.add("on"); } }
         }, s.name + (certified ? " ✓already" : ""));
         studentsBox.appendChild(chip);
@@ -629,13 +631,13 @@
   /* ========================================================================
      SESSION edit / add (incl. surveys & ad-hoc)
      ===================================================================== */
-  function openSessionModal(id, presetDate) {
+  function openSessionModal(id, presetDate, preset) {
     const existing = id ? S.sessions().find(s => s.id === id) : null;
-    const se = existing ? { ...existing } : {
+    const se = existing ? { ...existing } : Object.assign({
       id: null, date: presetDate || todayISO(), start: "07:00", end: "11:00",
       kind: "adhoc", medium: "dive", staff: "", assist: "", shadow: "", surveyLead: "",
       studentIds: [], diveSite: "", note: "", adhocType: "", adhocLabel: "", courseCode: "", moduleCode: ""
-    };
+    }, preset || {});
     if (!se.end) se.end = addHoursHHMM(se.start || "07:00", 4);
     const endInput = el("input", { type: "time", value: se.end, oninput: e => se.end = e.target.value });
 
@@ -843,10 +845,19 @@
     ]));
     const list = S.students();
     if (!list.length) { root.appendChild(el("div", { class: "empty", text: "No students yet. Add your first student to begin." })); return; }
+    const cardIndex = [];
+    const noHits = el("div", { class: "muted small hidden", text: "No students match your search." });
+    root.appendChild(el("input", { placeholder: "Search by name, email or course…", style: "max-width:340px;margin-bottom:14px",
+      oninput: e => {
+        const v = e.target.value.toLowerCase();
+        let hits = 0;
+        cardIndex.forEach(c => { const show = c.hay.includes(v); c.el.style.display = show ? "" : "none"; if (show) hits++; });
+        noHits.classList.toggle("hidden", hits > 0);
+      } }));
     const grid = el("div", { class: "grid-cards" });
     list.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
       const prog = S.courseProgress(s);
-      grid.appendChild(el("div", { class: "card", style: "cursor:pointer", onclick: () => openStudentModal(s.id) }, [
+      const card = el("div", { class: "card", style: "cursor:pointer", onclick: () => openStudentModal(s.id) }, [
         el("div", { class: "spread" }, [
           el("h3", { text: s.name, style: "margin:0" }),
           el("span", { class: "pill", text: `${prog.certified}/${prog.total}` })
@@ -857,9 +868,12 @@
           s.startLevel && s.startLevel.cert ? el("span", { class: "pill muted2", text: s.startLevel.cert }) : null,
           complianceMissing(s) ? el("span", { class: "pill warn", text: "⚠ " + complianceMissing(s) }) : el("span", { class: "pill good", text: "✓ compliance" })
         ])
-      ]));
+      ]);
+      grid.appendChild(card);
+      cardIndex.push({ el: card, hay: `${s.name} ${s.email || ""} ${courseBadgeText(s) || ""}`.toLowerCase() });
     });
     root.appendChild(grid);
+    root.appendChild(noHits);
 
     // archived
     const archived = S.students(true).filter(s => s.archived);
@@ -971,8 +985,25 @@
   }
 
   function renderStudentProgress(stu) {
-    const wrap = el("div", {}, [el("h4", { text: "Module progress", style: "margin-top:16px" })]);
+    const wrap = el("div", {});
     const codes = S.studentModuleCodes(stu);
+    const reqs = S.studentDiveReqs(stu);
+
+    // Outstanding summary
+    if (codes.length || reqs.length) {
+      const outMods = codes.filter(mc => !(stu.certs && stu.certs[mc] && stu.certs[mc].issued));
+      const outDives = reqs.filter(r => !S.diveReqStatus(stu, r.code, r.count).complete);
+      const allDone = !outMods.length && !outDives.length;
+      wrap.appendChild(el("div", { class: "card", style: "margin:16px 0 8px;padding:10px" }, [
+        el("strong", { text: "Outstanding" }),
+        el("div", { class: "small", style: "margin-top:4px;color:" + (allDone ? "var(--good)" : "var(--ink-muted)"),
+          text: allDone ? "All modules certified and dives complete 🎉"
+            : `${outMods.length} module${outMods.length !== 1 ? "s" : ""} to certify` +
+              (outDives.length ? ` · ${outDives.length} dive set${outDives.length !== 1 ? "s" : ""} to complete` : "") })
+      ]));
+    }
+
+    wrap.appendChild(el("h4", { text: "Module progress", style: "margin-top:12px" }));
     if (!codes.length) wrap.appendChild(el("p", { class: "muted small", text: "No modules yet — enrol in a course with modules configured." }));
     codes.forEach(mc => {
       const mod = S.moduleByCode(mc); if (!mod) return;
@@ -992,23 +1023,32 @@
             stageDot("✓", st.cert, () => toggleCert(stu, mc))
           ])
         ]),
-        el("div", { class: "small muted", style: "margin-top:4px" },
-          `${mod.elearn ? (st.elearning ? "e-learning ✓ · " : "e-learning pending · ") : ""}` +
-          `${st.classroom ? "classroom ✓ · " : "classroom pending · "}` +
-          `${mod.dives > 0 ? (st.dives ? "dives ✓" : `dives ${st.divesScheduled}/${st.needDives}`) : "no dives"}` +
-          (cert && cert.issued ? ` · certified ${fmtDay(cert.date)}${cert.staff ? " by " + cert.staff : ""}` : ""))
+        el("div", { class: "spread", style: "margin-top:4px" }, [
+          el("div", { class: "small muted" },
+            `${mod.elearn ? (st.elearning ? "e-learning ✓ · " : "e-learning pending · ") : ""}` +
+            `${st.classroom ? "classroom ✓ · " : "classroom pending · "}` +
+            `${mod.dives > 0 ? (st.dives ? "dives ✓" : `dives ${st.divesScheduled}/${st.needDives}`) : "no dives"}` +
+            (cert && cert.issued ? ` · certified ${fmtDay(cert.date)}${cert.staff ? " by " + cert.staff : ""}` : "")),
+          (!st.cert && !st.scheduledAny) ? el("button", { class: "btn btn-sm", onclick: () => { closeModal(); openScheduleModule({ moduleCode: mc, studentId: stu.id }); } }, "+ schedule") : null
+        ])
       ]));
     });
 
     // Required dive components (no cert)
-    const reqs = S.studentDiveReqs(stu);
     if (reqs.length) {
       wrap.appendChild(el("h4", { text: "Required dives", style: "margin-top:16px" }));
       reqs.forEach(r => {
         const st = S.diveReqStatus(stu, r.code, r.count);
         wrap.appendChild(el("div", { class: "list-line" }, [
           el("span", {}, `${r.name}${r.count > 1 ? ` ×${r.count}` : ""}`),
-          el("span", { class: "small " + (st.complete ? "muted" : ""), text: st.complete ? "✓ complete" : `${st.done}/${r.count} done · ${st.scheduled} scheduled` })
+          el("div", { class: "row", style: "gap:8px" }, [
+            el("span", { class: "small " + (st.complete ? "muted" : ""), text: st.complete ? "✓ complete" : `${st.done}/${r.count} done · ${st.scheduled} scheduled` }),
+            !st.complete ? el("button", { class: "btn btn-sm btn-ghost", onclick: () => {
+              closeModal();
+              openSessionModal(null, null, { kind: "adhoc", adhocType: r.code, adhocLabel: r.name,
+                medium: (S.diveCompByCode(r.code) || {}).medium || "dive", section: "dive", studentIds: [stu.id] });
+            } }, "+ schedule") : null
+          ])
         ]));
       });
     }

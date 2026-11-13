@@ -16,7 +16,7 @@
    ========================================================================== */
 
 const SEED = {
-  version: 5,
+  version: 6,
 
   // --- TAUGHT MODULES (certifications) -------------------------------------
   // code, name, agency, elearnKey, medium, dives, tmpl, singlePrice(฿), noSingle?
@@ -30,7 +30,7 @@ const SEED = {
     ["CTAXR",    "Coral Tax Review",                         "CD",  "CORALTAX", "dive", 2, null, 0, true],
     ["RESTO",    "Coral Restoration",                        "CD",  "RESTO",    "dive", 2, null, 8000],
     ["AR",       "Artificial Reefs",                         "CD",  "AR",       "dive", 2, "AR", 6000],
-    ["SHARK",    "Shark Ecology",                            "CD",  "SHARK",    "dive", 2, null, 6000],
+    ["SHARK",    "Shark Ecology",                            "CD",  "SHARK",    "dive", 2, null, 6000, true],
     ["GIANTCLAM","Giant Clam Ecology",                       "CD",  "GIANTCLAM","dive", 2, null, 6000],
     ["ADVEMP",   "Advanced EMP",                             "CD",  "ADVEMP",   "dive", 2, null, 6000],
     ["DISEA",    "Coral Disease",                            "CD",  "DISEA",    "dive", 2, null, 6000],
@@ -39,13 +39,13 @@ const SEED = {
     ["MAD",      "Mineral Accretion Device",                 "CD",  "MAD",      "dive", 2, null, 6000],
     ["SH",       "Sea Horse Ecology & Population Studies",   "CD",  "SH",       "dive", 2, null, 6000],
     ["CITSCI",   "Citizen Science",                          "CD",  "CITSCI",   "dive", 2, null, 9900],
-    ["TURTLE",   "Sea Turtle Ecology & Population Studies",  "CD",  "TURTLE",   "snorkel", 0, null, 6000],
+    ["TURTLE",   "Sea Turtle Ecology & Population Studies",  "CD",  "TURTLE",   "snorkel", 0, null, 6000, true],
     // BTC-certified (no e-learning)
     ["SLUG",     "Sea Slugs",                                "BTC", null,       "dive", 2, null, 6000],
     ["MPOL",     "Marine Pollution",                         "BTC", null,       "dive", 2, null, 6000],
     ["PRED",     "Coral Predators",                          "BTC", null,       "dive", 2, null, 6000],
     ["CLEAN",    "Cleaning Stations",                        "BTC", null,       "dive", 2, "CLEAN", 6000],
-    ["PLAST",    "Plastic Pollution: Monitoring & Assessment","BTC", null,      "land", 0, null, 6000]
+    ["PLAST",    "Plastic Pollution: Monitoring & Assessment","BTC", null,      "land", 0, null, 6000, true]
   ],
 
   // --- BUNDLES (a course that packages several modules at a set price) ------
