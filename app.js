@@ -1439,7 +1439,7 @@
         if (items.length) {
           const d = el("details", { style: "margin-top:2px", onclick: e => e.stopPropagation() });
           d.appendChild(el("summary", { style: "cursor:pointer;font-size:.82rem;color:var(--ink-muted)",
-            text: `${mcs.length} module${mcs.length !== 1 ? "s" : ""}${diveCount ? ` + ${diveCount} dive${diveCount !== 1 ? "s" : ""}` : ""}` }));
+            text: `${mcs.length} module${mcs.length !== 1 ? "s" : ""}` }));
           d.appendChild(el("ul", { class: "small", style: "margin:6px 0 0;padding-left:18px" },
             items.map(it => el("li", {}, it.kind === "dive"
               ? [el("span", { text: it.name }), el("span", { class: "muted", text: " · dive" })]
