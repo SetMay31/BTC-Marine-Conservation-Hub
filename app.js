@@ -896,6 +896,15 @@
     buildEnrol();
 
     const diveLevels = S.settings().diveLevels;
+    const diveWarnEl = el("div");
+    function updateDiveWarn() {
+      diveWarnEl.innerHTML = "";
+      const msgs = [];
+      if (s.startLevel.cert === "Open Water") msgs.push("Incoming cert is Open Water — most conservation modules require Advanced Open Water.");
+      const d = parseInt(s.startLevel.loggedDives, 10);
+      if (s.startLevel.loggedDives !== "" && !isNaN(d) && d < 20) msgs.push("Fewer than 20 logged dives.");
+      if (msgs.length) diveWarnEl.appendChild(el("div", { class: "warn-banner", style: "margin-top:8px", text: "⚠ " + msgs.join(" ") }));
+    }
     const tabProfile = el("div", {}, [
       el("div", { class: "field-row" }, [
         field("Name *", el("input", { value: s.name, oninput: e => s.name = e.target.value })),
@@ -919,10 +928,11 @@
       ]),
       el("h4", { text: "Starting level", style: "margin-top:8px" }),
       el("div", { class: "field-row" }, [
-        field("Incoming dive cert", el("select", { onchange: e => s.startLevel.cert = e.target.value },
+        field("Incoming dive cert", el("select", { onchange: e => { s.startLevel.cert = e.target.value; updateDiveWarn(); } },
           [el("option", { value: "" }, "—"), ...diveLevels.map(l => el("option", { value: l, selected: s.startLevel.cert === l ? "selected" : null }, l))])),
-        field("Logged dives", el("input", { type: "number", value: s.startLevel.loggedDives, oninput: e => s.startLevel.loggedDives = e.target.value }))
+        field("Logged dives", el("input", { type: "number", value: s.startLevel.loggedDives, oninput: e => { s.startLevel.loggedDives = e.target.value; updateDiveWarn(); } }))
       ]),
+      diveWarnEl,
       field("Course / programme *", enrolBox),
       el("h4", { text: "Compliance", style: "margin-top:8px" }),
       checkbox("Medical form complete", s.compliance.medical, v => s.compliance.medical = v),
@@ -946,6 +956,7 @@
     }});
 
     modal({ title: existing ? s.name : "Add student", body, actions, wide: true });
+    updateDiveWarn();
   }
 
   function renderStudentProgress(stu) {
@@ -1206,13 +1217,23 @@
       const grid = el("div", { class: "grid-cards" });
       cs.forEach(c => {
         const mcs = S.courseModuleCodes(c);
+        let modsEl;
+        if (mcs.length) {
+          const d = el("details", { style: "margin-top:2px", onclick: e => e.stopPropagation() });
+          d.appendChild(el("summary", { style: "cursor:pointer;font-size:.82rem;color:var(--ink-muted)",
+            text: `${mcs.length} module${mcs.length !== 1 ? "s" : ""}` }));
+          d.appendChild(el("ul", { class: "small", style: "margin:6px 0 0;padding-left:18px" },
+            mcs.map(code => el("li", { text: (S.moduleByCode(code) || {}).name || code }))));
+          modsEl = d;
+        } else {
+          modsEl = el("div", { class: "small muted", text: "No modules configured yet" });
+        }
         grid.appendChild(el("div", { class: "card", style: "cursor:pointer", onclick: () => openCourseModal(c.code) }, [
           el("div", { class: "spread" }, [el("h4", { text: c.name, style: "margin:0" }),
             c.price ? el("span", { class: "pill muted2", text: "฿" + c.price.toLocaleString() }) : null]),
           c.prereq ? el("div", { class: "muted small", text: "Prereq: " + c.prereq }) : null,
-          c.packOf ? el("div", { class: "small", text: "Pack: " + c.packOf.map(p => (S.courseByCode(p) || {}).name).join(" + ") })
-            : el("div", { class: "small muted", text: mcs.length ? mcs.length + " modules: " + mcs.join(", ") : "No modules configured yet" }),
-          c.divemaster ? el("div", { class: "pill warn", text: "Divemaster: + Course Assist + Survey Lead" }) : null
+          modsEl,
+          (c.extras && c.extras.length) ? el("div", { class: "pill warn", style: "margin-top:6px", text: "+ " + c.extras.join(" + ") }) : null
         ]));
       });
       root.appendChild(grid);
