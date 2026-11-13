@@ -43,6 +43,13 @@
     H = Math.min(23, (H || 0) + h);
     return String(H).padStart(2, "0") + ":" + String(M || 0).padStart(2, "0");
   }
+  function dayLabel(dISO) {
+    const t = todayISO();
+    if (dISO === t) return "Today";
+    if (dISO === addDays(t, 1)) return "Tomorrow";
+    if (dISO === addDays(t, -1)) return "Yesterday";
+    return fmtLong(dISO).replace(/ \d{4}$/, "");  // e.g. "Mon 17 Nov"
+  }
 
   /* ---------- app state ---------- */
   const UI = {
@@ -54,7 +61,8 @@
     schedStudentId: null,
     certView: "grid",          // grid | cards
     studentView: "list",       // list | calendar (inside student detail)
-    studentFilter: "current"   // current | all | pending | certified
+    studentFilter: "current",  // current | all | pending | certified
+    dashDay: null              // dashboard outings day (null = today)
   };
 
   /* ================= GATE ================= */
@@ -206,11 +214,24 @@
     ]));
 
     const grid = el("div", { class: "dash-grid" });
-    grid.appendChild(dashCard("This week's outings", upcoming.length
-      ? upcoming.sort(byDateTime).slice(0, 12).map(se => line(
-          `${fmtDay(se.date)} · ${se.start || ""} ${sessionTitle(se)}`,
-          se.staff || "—"))
-      : [emptyLine("Nothing scheduled this week")]));
+
+    // Day-navigable outings card (defaults to today)
+    const dashDay = UI.dashDay || today;
+    const dayOutings = S.sessions().filter(s => s.date === dashDay).sort(byDateTime);
+    grid.appendChild(el("div", { class: "card" }, [
+      el("div", { class: "spread" }, [
+        el("h3", { text: "Outings", style: "margin:0" }),
+        el("div", { class: "row", style: "gap:4px" }, [
+          el("button", { class: "btn btn-sm btn-ghost", title: "Previous day", onclick: () => { UI.dashDay = addDays(dashDay, -1); render(); }, text: "‹" }),
+          el("span", { class: "small", style: "min-width:96px;text-align:center;font-weight:600", text: dayLabel(dashDay) }),
+          el("button", { class: "btn btn-sm btn-ghost", title: "Next day", onclick: () => { UI.dashDay = addDays(dashDay, 1); render(); }, text: "›" }),
+          dashDay !== today ? el("button", { class: "btn btn-sm btn-ghost", title: "Back to today", onclick: () => { UI.dashDay = today; render(); }, text: "Today" }) : null
+        ])
+      ]),
+      ...(dayOutings.length
+        ? dayOutings.map(se => line(`${se.start || ""} ${sessionTitle(se)}`, se.staff || "—"))
+        : [emptyLine("Nothing scheduled")])
+    ]));
 
     grid.appendChild(dashCard("E-learning outstanding (dives coming)", elOutstanding.length
       ? elOutstanding.slice(0, 12).map(x => line(x.s.name, x.mod.code))
