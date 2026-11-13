@@ -1070,7 +1070,7 @@
       const usedModules = [...new Set(studs.flatMap(s => S.studentModuleCodes(s)))];
       const cols = S.modules().filter(m => usedModules.includes(m.code));
       const wrap = el("div", { class: "table-wrap" });
-      const tbl = el("table");
+      const tbl = el("table", { class: "cert-matrix" });
       tbl.appendChild(el("thead", {}, el("tr", {}, [th("Student"), ...cols.map(m => th(m.code))])));
       const tb = el("tbody");
       studs.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {

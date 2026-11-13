@@ -218,6 +218,11 @@ th { background: var(--surface-2); font-weight: 600; color: var(--ink-muted); po
 tbody tr:hover { background: var(--surface-2); }
 td.center, th.center { text-align: center; }
 
+/* certifications matrix: freeze the student column */
+.cert-matrix td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 3; box-shadow: 1px 0 0 var(--line); font-weight: 600; }
+.cert-matrix th:first-child { position: sticky; left: 0; top: 0; background: var(--surface-2); z-index: 5; box-shadow: 1px 0 0 var(--line); }
+.cert-matrix tbody tr:hover td:first-child { background: var(--surface-2); }
+
 /* cert matrix cells */
 .cell-cert { color: var(--good); font-weight: 700; }
 .cell-prog { color: var(--accent-2); }
