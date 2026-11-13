@@ -38,6 +38,11 @@
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function fmtDay(dISO) { const d = parseISO(dISO); return `${d.getDate()} ${MON[d.getMonth()]}`; }
   function fmtLong(dISO) { const d = parseISO(dISO); return `${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; }
+  function addHoursHHMM(hhmm, h) {
+    let [H, M] = (hhmm || "00:00").split(":").map(Number);
+    H = Math.min(23, (H || 0) + h);
+    return String(H).padStart(2, "0") + ":" + String(M || 0).padStart(2, "0");
+  }
 
   /* ---------- app state ---------- */
   const UI = {
@@ -627,10 +632,12 @@
   function openSessionModal(id, presetDate) {
     const existing = id ? S.sessions().find(s => s.id === id) : null;
     const se = existing ? { ...existing } : {
-      id: null, date: presetDate || todayISO(), start: "07:00", end: "09:00",
+      id: null, date: presetDate || todayISO(), start: "07:00", end: "11:00",
       kind: "adhoc", medium: "dive", staff: "", assist: "", shadow: "", surveyLead: "",
       studentIds: [], diveSite: "", note: "", adhocType: "", adhocLabel: "", courseCode: "", moduleCode: ""
     };
+    if (!se.end) se.end = addHoursHHMM(se.start || "07:00", 4);
+    const endInput = el("input", { type: "time", value: se.end, oninput: e => se.end = e.target.value });
 
     // Whole taught modules are added via "+ Schedule module"; this modal is for
     // flexible/ad-hoc dives and surveys. "module" only appears when editing an
@@ -693,9 +700,13 @@
       field("Session type", kindSel),
       !existing ? el("p", { class: "muted small", style: "margin-top:-6px", text: "To schedule a taught module (lecture + its dives), use “+ Schedule module” instead." }) : null,
       specific,
+      field("Date", el("input", { type: "date", value: se.date, oninput: e => se.date = e.target.value })),
       el("div", { class: "field-row" }, [
-        field("Date", el("input", { type: "date", value: se.date, oninput: e => se.date = e.target.value })),
-        field("Start", el("input", { type: "time", value: se.start, oninput: e => se.start = e.target.value }))
+        field("Start", el("input", { type: "time", value: se.start, oninput: e => {
+          se.start = e.target.value;
+          if (!se.end || se.end <= se.start) { se.end = addHoursHHMM(se.start, 4); endInput.value = se.end; }
+        }})),
+        field("End", endInput)
       ]),
       field("Lead staff" + (se.kind === "adhoc" ? " (optional)" : ""), staffSelect(v => se.staff = v, se.staff)),
       el("div", { class: "field-row" }, [
