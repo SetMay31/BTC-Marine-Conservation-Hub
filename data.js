@@ -16,35 +16,42 @@
    ========================================================================== */
 
 const SEED = {
-  version: 4,
+  version: 5,
 
   // --- TAUGHT MODULES (certifications) -------------------------------------
-  // code, name, agency, elearnKey, medium, dives, tmpl
+  // code, name, agency, elearnKey, medium, dives, tmpl, singlePrice(฿), noSingle?
+  // singlePrice = price when sold as a standalone single course.
+  // noSingle = true → not sold on its own (only inside programmes).
   modules: [
-    ["EMP",      "Ecological Monitoring Program",            "CD",  "EMP",      "dive", 6, "EMP"],
-    ["CTAX1",    "Coral Tax I",                              "CD",  "CORALTAX", "dive", 2, null],
-    ["CTAX2",    "Coral Tax II",                             "CD",  "CORALTAX", "dive", 2, null],
-    ["CTAX3",    "Coral Tax III",                            "CD",  "CORALTAX", "dive", 2, null],
-    ["CTAXR",    "Coral Tax Review",                         "CD",  "CORALTAX", "dive", 2, null],
-    ["ADVTAX",   "Advanced Coral Taxonomy",                  "CD",  "ADVTAX",   "dive", 2, null],
-    ["RESTO",    "Coral Restoration",                        "CD",  "RESTO",    "dive", 2, null],
-    ["AR",       "Artificial Reefs",                         "CD",  "AR",       "dive", 2, "AR"],
-    ["SHARK",    "Shark Ecology",                            "CD",  "SHARK",    "dive", 2, null],
-    ["GIANTCLAM","Giant Clam Ecology",                       "CD",  "GIANTCLAM","dive", 2, null],
-    ["ADVEMP",   "Advanced EMP",                             "CD",  "ADVEMP",   "dive", 2, null],
-    ["DISEA",    "Coral Disease",                            "CD",  "DISEA",    "dive", 2, null],
-    ["IMAGEJ",   "Image J",                                  "CD",  "IMAGEJ",   "dive", 2, null],
-    ["NUDI",     "Nudibranch Ecology & ID",                  "CD",  "NUDI",     "dive", 2, null],
-    ["MAD",      "Mineral Accretion Device",                 "CD",  "MAD",      "dive", 2, null],
-    ["SH",       "Sea Horse Ecology & Population Studies",   "CD",  "SH",       "dive", 2, null],
-    ["CITSCI",   "Citizen Science",                          "CD",  "CITSCI",   "dive", 2, null],
-    ["TURTLE",   "Sea Turtle Ecology & Population Studies",  "CD",  "TURTLE",   "snorkel", 0, null],
+    ["EMP",      "Ecological Monitoring Program",            "CD",  "EMP",      "dive", 6, "EMP", 11900],
+    ["CTAX1",    "Coral Tax I",                              "CD",  "CORALTAX", "dive", 2, null, 6000],
+    ["CTAX2",    "Coral Tax II",                             "CD",  "CORALTAX", "dive", 2, null, 6000],
+    ["CTAX3",    "Coral Tax III",                            "CD",  "CORALTAX", "dive", 2, null, 6000],
+    ["CTAXR",    "Coral Tax Review",                         "CD",  "CORALTAX", "dive", 2, null, 0, true],
+    ["RESTO",    "Coral Restoration",                        "CD",  "RESTO",    "dive", 2, null, 8000],
+    ["AR",       "Artificial Reefs",                         "CD",  "AR",       "dive", 2, "AR", 6000],
+    ["SHARK",    "Shark Ecology",                            "CD",  "SHARK",    "dive", 2, null, 6000],
+    ["GIANTCLAM","Giant Clam Ecology",                       "CD",  "GIANTCLAM","dive", 2, null, 6000],
+    ["ADVEMP",   "Advanced EMP",                             "CD",  "ADVEMP",   "dive", 2, null, 6000],
+    ["DISEA",    "Coral Disease",                            "CD",  "DISEA",    "dive", 2, null, 6000],
+    ["IMAGEJ",   "Image J",                                  "CD",  "IMAGEJ",   "dive", 2, null, 6000],
+    ["NUDI",     "Nudibranch Ecology & ID",                  "CD",  "NUDI",     "dive", 2, null, 6000],
+    ["MAD",      "Mineral Accretion Device",                 "CD",  "MAD",      "dive", 2, null, 6000],
+    ["SH",       "Sea Horse Ecology & Population Studies",   "CD",  "SH",       "dive", 2, null, 6000],
+    ["CITSCI",   "Citizen Science",                          "CD",  "CITSCI",   "dive", 2, null, 9900],
+    ["TURTLE",   "Sea Turtle Ecology & Population Studies",  "CD",  "TURTLE",   "snorkel", 0, null, 6000],
     // BTC-certified (no e-learning)
-    ["SLUG",     "Sea Slugs",                                "BTC", null,       "dive", 2, null],
-    ["MPOL",     "Marine Pollution",                         "BTC", null,       "dive", 2, null],
-    ["PRED",     "Coral Predators",                          "BTC", null,       "dive", 2, null],
-    ["CLEAN",    "Cleaning Stations",                        "BTC", null,       "dive", 2, "CLEAN"],
-    ["PLAST",    "Plastic Pollution: Monitoring & Assessment","BTC", null,      "land", 0, null]
+    ["SLUG",     "Sea Slugs",                                "BTC", null,       "dive", 2, null, 6000],
+    ["MPOL",     "Marine Pollution",                         "BTC", null,       "dive", 2, null, 6000],
+    ["PRED",     "Coral Predators",                          "BTC", null,       "dive", 2, null, 6000],
+    ["CLEAN",    "Cleaning Stations",                        "BTC", null,       "dive", 2, "CLEAN", 6000],
+    ["PLAST",    "Plastic Pollution: Monitoring & Assessment","BTC", null,      "land", 0, null, 6000]
+  ],
+
+  // --- BUNDLES (a course that packages several modules at a set price) ------
+  bundles: [
+    { code:"ADVTAX", name:"Advanced Coral Taxonomy (Coral Tax II + III)", price:10000,
+      moduleCodes:["CTAX2","CTAX3"], prereq:"AOW + EMP + Coral Taxonomy" }
   ],
 
   // --- DIVE-ONLY COMPONENTS (no cert; 2 dives / one boat) ------------------
@@ -60,7 +67,7 @@ const SEED = {
   // modules = taught modules this level ADDS; diveComps = dive components it ADDS
   // (diveComps may repeat a key = that many separate 2-dive requirements).
   programs: [
-    { code:"CC",  name:"Core Conservationist",    stacksOn:null, weeks:1, price:0,
+    { code:"CC",  name:"Core Conservationist",    stacksOn:null, weeks:1, price:19900,
       modules:["EMP","CTAX1"], diveComps:["ASSESS"] },
     { code:"CS",  name:"Conservation Specialist",  stacksOn:"CC", weeks:2, price:33000,
       modules:["CTAX2","SLUG"], diveComps:["INDPROJ"] },
@@ -70,7 +77,7 @@ const SEED = {
       modules:["SHARK","GIANTCLAM","PRED","CLEAN"], diveComps:["EMPDIVE","RESDIVE"] },
     { code:"SD",  name:"Scientific Diver",         stacksOn:"MC", weeks:2, price:30000,
       modules:["ADVEMP","DISEA","IMAGEJ"], diveComps:["RESDIVE","RESDIVE","EMPDIVE","NIGHTRES"] },
-    { code:"CDM", name:"Conservation Divemaster",  stacksOn:"CS", weeks:4, price:0,
+    { code:"CDM", name:"Conservation Divemaster",  stacksOn:"CS", weeks:4, price:96900,
       modules:[], diveComps:[], extras:["Course Assist","Survey Lead"] }
   ],
 
@@ -93,7 +100,7 @@ const SEED = {
 
   // --- RESEARCH ASSISTANT (flexible 2-week add-on) ------------------------
   addons: [
-    { code:"RA", name:"Research Assistant (2 weeks)", weeks:2, price:0, flexible:true }
+    { code:"RA", name:"Research Assistant (2 weeks)", weeks:2, price:12000, flexible:true }
   ],
 
   // --- CONSERVATION SURVEYS (staff-only outings) --------------------------

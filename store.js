@@ -14,7 +14,7 @@ const Store = (() => {
     const S = window.SEED;
     const modules = S.modules.map(m => ({
       id: m[0], code: m[0], name: m[1], agency: m[2], elearn: m[3],
-      medium: m[4], dives: m[5], tmpl: m[6], kind: "taught"
+      medium: m[4], dives: m[5], tmpl: m[6], price: m[7] || 0, noSingle: !!m[8], kind: "taught"
     }));
     const diveComponents = S.diveComponents.map(d => ({
       code: d[0], name: d[1], medium: d[2], dives: d[3]
@@ -38,10 +38,16 @@ const Store = (() => {
     (S.addons || []).forEach(a => courses.push({
       id: a.code, code: a.code, name: a.name, kind: "addon",
       moduleCodes: [], diveComps: [], flexible: true, weeks: a.weeks, price: a.price, prereq: "" }));
-    // one single-course offering per taught module
-    modules.forEach(m => courses.push({
-      id: "C_" + m.code, code: "C_" + m.code, name: m.name, kind: "single",
-      moduleCodes: [m.code], price: 0, prereq: "" }));
+    // one single-course offering per taught module (unless not sold separately)
+    modules.forEach(m => {
+      if (m.noSingle) return;
+      courses.push({ id: "C_" + m.code, code: "C_" + m.code, name: m.name, kind: "single",
+        moduleCodes: [m.code], price: m.price || 0, prereq: "" });
+    });
+    // bundles (a course that packages several modules at a set price)
+    (S.bundles || []).forEach(b => courses.push({
+      id: b.code, code: b.code, name: b.name, kind: "single", bundle: true,
+      moduleCodes: [...b.moduleCodes], price: b.price || 0, prereq: b.prereq || "" }));
     (S.surveys || []).forEach(s => courses.push({
       id: s.code, code: s.code, name: s.name, kind: "survey", staffOnly: true,
       medium: s.medium, uploader: s.uploader, price: s.price, prereq: "Any level" }));
@@ -76,7 +82,7 @@ const Store = (() => {
   }
   function migrate() {
     // If an older (v3) store is present, re-seed the catalogue but keep students/sessions.
-    if (!state.meta || state.meta.version < 4) {
+    if (!state.meta || state.meta.version < window.SEED.version) {
       const fresh = seed();
       const keptStudents = state.students || [];
       const keptSessions = state.sessions || [];
