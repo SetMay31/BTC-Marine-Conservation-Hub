@@ -16,7 +16,7 @@
    ========================================================================== */
 
 const SEED = {
-  version: 6,
+  version: 7,
 
   // --- TAUGHT MODULES (certifications) -------------------------------------
   // code, name, agency, elearnKey, medium, dives, tmpl, singlePrice(฿), noSingle?
@@ -70,7 +70,7 @@ const SEED = {
     { code:"CC",  name:"Core Conservationist",    stacksOn:null, weeks:1, price:19900,
       modules:["EMP","CTAX1"], diveComps:["ASSESS"] },
     { code:"CS",  name:"Conservation Specialist",  stacksOn:"CC", weeks:2, price:33000,
-      modules:["CTAX2","SLUG"], diveComps:["INDPROJ"] },
+      modules:["CTAX2","TURTLE","SLUG"], diveComps:["INDPROJ"] },
     { code:"RS",  name:"Reef Specialist",          stacksOn:"CS", weeks:2, price:30000,
       modules:["MPOL","CTAX3","CTAXR","AR","RESTO"], diveComps:["EMPDIVE"] },
     { code:"MC",  name:"Master Conservationist",   stacksOn:"RS", weeks:2, price:30000,

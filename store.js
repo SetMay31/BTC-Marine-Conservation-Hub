@@ -83,7 +83,7 @@ const Store = (() => {
   // Stores at/above this version KEEP their in-app catalogue edits across updates.
   // Only a store older than the baseline is reseeded (one-time catch-up), and
   // only a deliberate bump of this number ever force-refreshes the catalogue.
-  const CATALOGUE_BASELINE = 6;
+  const CATALOGUE_BASELINE = 7;
   function migrate() {
     const stored = (state.meta && state.meta.version) || 0;
     if (stored < CATALOGUE_BASELINE) {
