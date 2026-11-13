@@ -342,14 +342,25 @@ td.center, th.center { text-align: center; }
   .print-sheet table { width: 100%; border-collapse: collapse; margin-top: 6px; }
   .print-sheet th, .print-sheet td { border: 1px solid #999; padding: 6px 8px; text-align: left; font-size: 12px; color: #000; }
   .print-sheet th { background: #eee; }
-  /* student timetable calendar */
+  /* student timetable calendar — BTC-branded */
+  .print-sheet, .print-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-sheet .pt-banner { display: flex; align-items: center; gap: 12px; background: #1a4d6d; color: #fff; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; }
+  .print-sheet .pt-banner img { width: 46px; height: 46px; object-fit: contain; }
+  .print-sheet .pt-title { font-size: 15px; font-weight: 700; }
+  .print-sheet .pt-sub { font-size: 11px; color: rgba(255, 255, 255, .88); margin-top: 2px; }
+  .print-sheet .pt-legend { display: flex; gap: 12px; font-size: 9px; color: #444; margin-bottom: 8px; }
+  .print-sheet .pt-lg { display: inline-flex; align-items: center; gap: 4px; }
+  .print-sheet .pt-lg i { width: 12px; height: 10px; display: inline-block; border-radius: 2px; }
   .print-sheet .pt-cal { table-layout: fixed; }
-  .print-sheet .pt-cal th { text-align: center; font-size: 11px; padding: 4px; }
-  .print-sheet .pt-cal td { vertical-align: top; width: 14.28%; height: 78px; padding: 3px; font-size: 9.5px; }
+  .print-sheet .pt-cal th { text-align: center; font-size: 10px; padding: 4px; background: #1a4d6d; color: #fff; border: 1px solid #14405c; }
+  .print-sheet .pt-cal td { vertical-align: top; width: 14.28%; height: 84px; padding: 3px; font-size: 8.5px; }
   .print-sheet .pt-cal tr { page-break-inside: avoid; }
-  .print-sheet .pt-out { background: #f4f4f4; color: #aaa; }
-  .print-sheet .pt-day { font-weight: 700; font-size: 9px; color: #666; margin-bottom: 2px; }
-  .print-sheet .pt-sess { border-left: 2px solid #444; padding: 1px 3px; margin-bottom: 2px; line-height: 1.2; }
+  .print-sheet .pt-out { background: #f4f4f4; }
+  .print-sheet .pt-out .pt-day { color: #bbb; }
+  .print-sheet .pt-day { font-weight: 700; font-size: 8.5px; color: #555; margin-bottom: 2px; }
+  .print-sheet .pt-sess { border-radius: 3px; padding: 2px 4px; margin-bottom: 2px; line-height: 1.15; overflow-wrap: anywhere; color: #13303a; }
+  .print-sheet .pt-sess .pt-code { font-weight: 700; }
+  .print-sheet .pt-sess .pt-seg { font-size: 8px; }
 }
 
 /* responsive */

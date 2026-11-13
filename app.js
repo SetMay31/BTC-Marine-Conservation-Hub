@@ -355,6 +355,18 @@
     setTimeout(cleanup, 1500);
   }
 
+  // Session colours for the printed timetable (matches the hub mediums).
+  const PT_COLORS = { land: ["#6fb3a5", "#dcefe9"], snorkel: ["#65bcd0", "#dcf0f5"], dive: ["#2a7a8a", "#d2e6ea"], survey: ["#8a6fb0", "#e6ddf2"], adhoc: ["#c9975c", "#f2e7d4"] };
+  function sessCode(se) {
+    if (se.kind === "survey") { const c = S.courseByCode(se.courseCode); return c ? c.name : "Survey"; }
+    if (se.kind === "adhoc") return se.adhocLabel || "Session";
+    const m = S.moduleByCode(se.moduleCode); return m ? m.code : (se.moduleCode || "Session");
+  }
+  function sessSeg(se) {
+    if (se.kind === "survey" || se.kind === "adhoc") return "";
+    return se.name || (se.section === "lecture" ? "Lecture" : "Dive");
+  }
+
   // Printable calendar timetable for one student (Save as PDF from the print dialog).
   function printStudentTimetable(stu) {
     const sess = S.sessions().filter(s => (s.studentIds || []).includes(stu.id)).sort(byDateTime);
@@ -365,17 +377,32 @@
     const lastSun = addDays(mondayOf(end), 6);
     const weeks = [];
     for (let d = mondayOf(start); d <= lastSun; d = addDays(d, 7)) weeks.push(d);
+
+    const sessHtml = se => {
+      const col = PT_COLORS[se.medium || "dive"] || PT_COLORS.dive;
+      const seg = sessSeg(se);
+      return `<div class="pt-sess" style="border-left:3px solid ${col[0]};background:${col[1]}">` +
+        `<div class="pt-code">${esc(se.start || "")} - ${esc(sessCode(se))}</div>` +
+        (seg ? `<div class="pt-seg">${esc(seg)}</div>` : "") + `</div>`;
+    };
     const cellHtml = dISO => {
-      const dayNum = parseISO(dISO).getDate();
-      const items = sess.filter(s => s.date === dISO).sort(byDateTime)
-        .map(se => `<div class="pt-sess"><b>${esc(se.start || "")}</b> ${esc(sessionTitle(se))}</div>`).join("");
+      const d = parseISO(dISO), dayNum = d.getDate();
+      const items = sess.filter(s => s.date === dISO).sort(byDateTime).map(sessHtml).join("");
       const inRange = dISO >= start && dISO <= end;
-      return `<td class="${inRange ? "" : "pt-out"}"><div class="pt-day">${dayNum} ${esc(MON[parseISO(dISO).getMonth()])}</div>${items}</td>`;
+      return `<td class="${inRange ? "" : "pt-out"}"><div class="pt-day">${dayNum} ${esc(MON[d.getMonth()])}</div>${items}</td>`;
     };
     const rows = weeks.map(w => `<tr>${[0, 1, 2, 3, 4, 5, 6].map(i => cellHtml(addDays(w, i))).join("")}</tr>`).join("");
+    const lg = (c, label) => `<span class="pt-lg"><i style="border-left:3px solid ${PT_COLORS[c][0]};background:${PT_COLORS[c][1]}"></i>${label}</span>`;
+
     const sheet = el("div", { class: "print-sheet", html:
-      `<h2 style="margin:0 0 2px">${esc(stu.name)} — Timetable</h2>
-       <div style="margin-bottom:10px">${esc(fmtLong(start))} → ${esc(fmtLong(end))}${stu.departure ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
+      `<div class="pt-banner">
+         <img src="logo.png" alt="Black Turtle Conservation" onerror="this.style.display='none'" />
+         <div class="pt-banner-text">
+           <div class="pt-title">Black Turtle Conservation — Student Timetable</div>
+           <div class="pt-sub">${esc(stu.name)} &nbsp;·&nbsp; ${esc(fmtLong(start))} → ${esc(fmtLong(end))}${stu.departure ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
+         </div>
+       </div>
+       <div class="pt-legend">${lg("land", "Lecture / land")} ${lg("dive", "Dive")} ${lg("snorkel", "Snorkel")} ${lg("survey", "Survey")} ${lg("adhoc", "Flexible")}</div>
        <table class="pt-cal"><thead><tr>${DOW.map(d => `<th>${d}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` });
     document.body.appendChild(sheet);
     const cleanup = () => { sheet.remove(); window.removeEventListener("afterprint", cleanup); };
