@@ -1564,6 +1564,22 @@
       ])
     ]));
 
+    root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
+      el("h3", { text: "Demo data" }),
+      el("p", { class: "muted small", text: "Load 20 example students (with schedule, certifications and e-learning) to explore and demonstrate the hub. Dates are relative to today. Example students all use @example.com emails." }),
+      el("div", { class: "row" }, [
+        demoLoaded()
+          ? el("button", { class: "btn btn-danger", onclick: () => confirmDialog("Remove all demo students (the @example.com ones) and their sessions?", () => {
+              const ids = S.students(true).filter(s => (s.email || "").endsWith("@example.com")).map(s => s.id);
+              ids.forEach(id => S.deleteStudent(id));
+              toast("Demo data removed"); render();
+            }, "Remove demo") }, "Remove demo data")
+          : el("button", { class: "btn btn-primary", onclick: () => confirmDialog("Add 20 example students with schedule, certifications and e-learning for demonstration?", () => {
+              seedDemoData(); toast("Demo data loaded"); render();
+            }, "Load demo data", false) }, "Load demo data")
+      ])
+    ]));
+
     let newPw = "";
     root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
       el("h3", { text: "Password" }),
@@ -1619,6 +1635,67 @@
   function isStaffOffByName(name, dISO) {
     const st = S.staff().find(x => x.name === name);
     return st ? S.staffOff(st.id, dISO) : false;
+  }
+
+  /* ================= DEMO DATA ================= */
+  function demoLoaded() { return S.students(true).some(s => s.email === "lidia.rossi@example.com"); }
+  function seedDemoData() {
+    const iso = off => addDays(todayISO(), off);
+    const comp = (m, w, p) => ({ medical: !!m, waiver: !!w, cdPaperwork: !!p });
+    const specs = [
+      { n: "Lidia Rossi", e: "lidia.rossi@example.com", nat: "Italy", cert: "Advanced Open Water", dv: 35, c: ["CS"], arr: -8, dep: 6, cp: comp(1, 1, 1) },
+      { n: "Paul Mitchell", e: "paul.m@example.com", nat: "UK", cert: "Advanced Open Water", dv: 62, c: ["RS"], arr: -12, dep: 16, cp: comp(1, 1, 1) },
+      { n: "Annie Feldmar", e: "annie.f@example.com", nat: "USA", cert: "Rescue Diver", dv: 135, c: ["CDM"], arr: -20, dep: 30, cp: comp(1, 1, 1) },
+      { n: "Timon Renggli", e: "timon.r@example.com", nat: "Switzerland", cert: "Advanced Open Water", dv: 28, c: ["CS"], arr: -3, dep: 11, cp: comp(1, 1, 0) },
+      { n: "Dustin Bartsch", e: "dustin.b@example.com", nat: "Germany", cert: "Advanced Open Water", dv: 22, c: ["C_EMP"], arr: -2, dep: 5, cp: comp(1, 0, 0) },
+      { n: "Sofia Hernandez", e: "sofia.h@example.com", nat: "Spain", cert: "Advanced Open Water", dv: 48, c: ["MC"], arr: -15, dep: 13, cp: comp(1, 1, 1) },
+      { n: "Kenji Tanaka", e: "kenji.t@example.com", nat: "Japan", cert: "Advanced Open Water", dv: 16, c: ["RS"], arr: -5, dep: 9, cp: comp(1, 1, 0) },
+      { n: "Emma Larsen", e: "emma.l@example.com", nat: "Denmark", cert: "Open Water", dv: 9, c: ["D_SHARK"], arr: -1, dep: 3, cp: comp(0, 1, 0) },
+      { n: "Mateo Alvarez", e: "mateo.a@example.com", nat: "Argentina", cert: "Advanced Open Water", dv: 54, c: ["SD"], arr: -18, dep: 20, cp: comp(1, 1, 1) },
+      { n: "Chloe Dubois", e: "chloe.d@example.com", nat: "France", cert: "Advanced Open Water", dv: 33, c: ["CC"], arr: -6, dep: 4, cp: comp(1, 1, 1) },
+      { n: "Noah Williams", e: "noah.w@example.com", nat: "Australia", cert: "Advanced Open Water", dv: 41, c: ["PK2"], arr: -10, dep: 18, cp: comp(1, 0, 1) },
+      { n: "Yuki Nakamura", e: "yuki.n@example.com", nat: "Japan", cert: "Advanced Open Water", dv: 27, c: ["C_CTAX1"], arr: -4, dep: 2, cp: comp(1, 1, 1) },
+      { n: "Olivia Brown", e: "olivia.b@example.com", nat: "Canada", cert: "Advanced Open Water", dv: 30, c: ["CS"], arr: 10, dep: 24, cp: comp(0, 0, 0) },
+      { n: "Liam Smith", e: "liam.s@example.com", nat: "Ireland", cert: "Advanced Open Water", dv: 24, c: ["RS"], arr: 14, dep: 42, cp: comp(1, 0, 0) },
+      { n: "Mia Garcia", e: "mia.g@example.com", nat: "Mexico", cert: "Open Water", dv: 7, c: ["D_TURTLE"], arr: 21, dep: 23, cp: comp(0, 0, 0) },
+      { n: "Lucas Meyer", e: "lucas.m@example.com", nat: "Germany", cert: "Advanced Open Water", dv: 38, c: ["MC"], arr: 30, dep: 58, cp: comp(0, 0, 0) },
+      { n: "Hannah Weber", e: "hannah.w@example.com", nat: "Austria", cert: "Divemaster", dv: 210, c: ["SD"], arr: -30, dep: -3, cp: comp(1, 1, 1) },
+      { n: "Diego Santos", e: "diego.s@example.com", nat: "Brazil", cert: "Rescue Diver", dv: 96, c: ["RS"], arr: -26, dep: -1, cp: comp(1, 1, 1) },
+      { n: "Ava Johnson", e: "ava.j@example.com", nat: "USA", cert: "Advanced Open Water", dv: 50, c: ["CS"], arr: -60, dep: -40, cp: comp(1, 1, 1), ar: 1 },
+      { n: "Ben Carter", e: "ben.c@example.com", nat: "UK", cert: "Advanced Open Water", dv: 44, c: ["C_EMP"], arr: -80, dep: -62, cp: comp(1, 1, 1), ar: 1 }
+    ];
+    const stu = {};
+    specs.forEach(sp => { stu[sp.n] = S.upsertStudent({ name: sp.n, email: sp.e, phone: "", nationality: sp.nat, courses: sp.c, startLevel: { cert: sp.cert, loggedDives: String(sp.dv), priorModules: [] }, compliance: sp.cp, arrival: iso(sp.arr), departure: iso(sp.dep), archived: !!sp.ar }); });
+
+    const certMod = (name, mc, off, by) => { const s = stu[name]; if (s && S.studentModuleCodes(s).includes(mc)) S.setCert(s.id, mc, true, iso(off), by); };
+    const certAll = (name, by) => { const s = stu[name]; if (!s) return; S.studentModuleCodes(s).forEach((mc, i) => S.setCert(s.id, mc, true, iso(-(i + 1)), by)); };
+    certAll("Hannah Weber", "Cass"); certAll("Diego Santos", "Seth");
+    certMod("Lidia Rossi", "EMP", -4, "Cass"); certMod("Lidia Rossi", "CTAX1", -2, "Cass");
+    certMod("Paul Mitchell", "EMP", -6, "Seth"); certMod("Paul Mitchell", "CTAX1", -4, "Seth"); certMod("Paul Mitchell", "CTAX2", -1, "Seth");
+    certMod("Sofia Hernandez", "EMP", -33, "Kelly"); certMod("Sofia Hernandez", "CTAX1", -32, "Kelly");
+    certMod("Mateo Alvarez", "EMP", -7, "Irene");
+    certMod("Ava Johnson", "EMP", -45, "Cass"); certMod("Ava Johnson", "CTAX1", -44, "Cass");
+
+    const elf = (name, key) => { if (stu[name]) S.setElearning(stu[name].id, key, true); };
+    ["Lidia Rossi", "Paul Mitchell", "Sofia Hernandez", "Mateo Alvarez", "Hannah Weber", "Diego Santos", "Chloe Dubois"].forEach(n => elf(n, "EMP"));
+    ["Paul Mitchell", "Hannah Weber", "Diego Santos", "Lidia Rossi"].forEach(n => elf(n, "CORALTAX"));
+
+    function sched(name, mc, off, staff, site) {
+      const s = stu[name]; const mod = S.moduleByCode(mc); if (!s || !mod) return;
+      const g = S.uid("grp"); const d = iso(off);
+      S.addSession({ moduleCode: mc, kind: "module", groupId: g, staff, studentIds: [s.id], date: d, start: "09:00", end: "10:30", section: "lecture", name: "Lecture", medium: "land", diveSite: "" });
+      [["12:00", "14:00", 1], ["14:00", "16:00", 2]].forEach(t => S.addSession({ moduleCode: mc, kind: "module", groupId: g, staff, studentIds: [s.id], date: d, start: t[0], end: t[1], section: "dive", diveIndex: t[2], name: "Dive " + t[2], medium: (mod.medium || "dive"), diveSite: site || "Aow Leuk" }));
+    }
+    sched("Chloe Dubois", "EMP", -2, "C.J.", "Twins");
+    sched("Timon Renggli", "EMP", 0, "Maisie", "Aow Leuk");
+    sched("Lidia Rossi", "CTAX2", 2, "Cass", "Hin Wong");
+    sched("Paul Mitchell", "CTAX3", 1, "Seth", "Aow Leuk");
+    sched("Sofia Hernandez", "RESTO", 3, "Kelly", "Twins");
+    sched("Mateo Alvarez", "ADVEMP", 5, "Irene", "White Rock");
+    sched("Annie Feldmar", "SLUG", 6, "Tereza", "Aow Leuk");
+    sched("Yuki Nakamura", "CTAX1", 4, "", "Hin Wong");
+    S.addSession({ courseCode: "SV_SHARK", kind: "survey", staff: "Michael", studentIds: [], date: iso(1), start: "07:00", end: "09:00", medium: "snorkel", name: "", diveSite: "Shark Bay" });
+    if (stu["Mateo Alvarez"]) S.addSession({ adhocType: "RESDIVE", adhocLabel: "Research Dives", kind: "adhoc", staff: "Irene", studentIds: [stu["Mateo Alvarez"].id], date: iso(7), start: "12:00", end: "16:00", section: "dive", medium: "dive", diveSite: "White Rock" });
   }
 
   /* ================= BOOT ================= */
