@@ -258,9 +258,11 @@ const Store = (() => {
   }
   function diveReqStatus(stu, compCode, needCount) {
     const sess = studentCompSessions(stu.id, compCode);
-    const doneSess = sess.filter(s => isPastOrToday(s.date));
-    return { scheduled: sess.length, done: doneSess.length, need: needCount,
-      complete: doneSess.length >= needCount };
+    // Count boat trips (a 2-dive outing shares one groupId), not individual dives.
+    const boats = ss => [...new Set(ss.map(s => s.groupId || s.id))].length;
+    const scheduled = boats(sess);
+    const done = boats(sess.filter(s => isPastOrToday(s.date)));
+    return { scheduled, done, need: needCount, complete: done >= needCount };
   }
 
   function courseProgress(stu) {

@@ -362,6 +362,19 @@
     if (se.kind === "adhoc") return se.adhocLabel || "Session";
     const m = S.moduleByCode(se.moduleCode); return m ? m.code : (se.moduleCode || "Session");
   }
+  // Short, readable module names for the printed timetable (avoid terse codes).
+  const MODULE_SHORT = {
+    EMP: "EMP", CTAX1: "Coral Tax I", CTAX2: "Coral Tax II", CTAX3: "Coral Tax III", CTAXR: "Coral Tax Review",
+    RESTO: "Coral Restoration", AR: "Artificial Reefs", SHARK: "Shark Ecology", GIANTCLAM: "Giant Clams",
+    ADVEMP: "Adv EMP", DISEA: "Coral Diseases", IMAGEJ: "Image J", NUDI: "Nudibranch ID", MAD: "MAD",
+    SH: "Sea Horse", CITSCI: "Citizen Science", TURTLE: "Turtle Ecology", SLUG: "Sea Slugs",
+    MPOL: "Marine Pollution", PRED: "Coral Predators", CLEAN: "Cleaning Stations", PLAST: "Plastic Pollution"
+  };
+  function ptLabel(se) {
+    if (se.kind === "survey") { const c = S.courseByCode(se.courseCode); return c ? c.name : "Survey"; }
+    if (se.kind === "adhoc") return se.adhocLabel || "Session";
+    return MODULE_SHORT[se.moduleCode] || (S.moduleByCode(se.moduleCode) || {}).name || se.moduleCode;
+  }
   function sessSeg(se) {
     if (se.kind === "survey" || se.kind === "adhoc") return "";
     return se.name || (se.section === "lecture" ? "Lecture" : "Dive");
@@ -382,7 +395,7 @@
       const col = PT_COLORS[se.medium || "dive"] || PT_COLORS.dive;
       const seg = sessSeg(se);
       return `<div class="pt-sess" style="border-left:3px solid ${col[0]};background:${col[1]}">` +
-        `<div class="pt-code">${esc(se.start || "")} - ${esc(sessCode(se))}</div>` +
+        `<div class="pt-code">${esc(se.start || "")} - ${esc(ptLabel(se))}</div>` +
         (seg ? `<div class="pt-seg">${esc(seg)}</div>` : "") + `</div>`;
     };
     const cellHtml = dISO => {
@@ -618,7 +631,7 @@
   /* ---------- session title helpers ---------- */
   function sessionTitle(se) {
     if (se.kind === "survey") { const c = S.courseByCode(se.courseCode); return c ? c.name : "Survey"; }
-    if (se.kind === "adhoc") return se.adhocLabel || "Session";
+    if (se.kind === "adhoc") return (se.adhocLabel || "Session") + (se.diveIndex ? ` — Dive ${se.diveIndex}` : "");
     const mod = S.moduleByCode(se.moduleCode);
     const base = mod ? mod.name : (se.moduleCode || "Session");
     const tag = se.name || (se.section === "lecture" ? "Lecture" : (se.section === "dive" ? `Dive${se.diveIndex ? " " + se.diveIndex : ""}` : ""));
@@ -626,7 +639,7 @@
   }
   function shortTitle(se) {
     if (se.kind === "survey") return (S.courseByCode(se.courseCode) || {}).name || "Survey";
-    if (se.kind === "adhoc") return se.adhocLabel || "Session";
+    if (se.kind === "adhoc") return (se.adhocLabel || "Session") + (se.diveIndex ? ` D${se.diveIndex}` : "");
     const mod = S.moduleByCode(se.moduleCode);
     const code = mod ? mod.code : se.moduleCode;
     return `${code} ${se.name || (se.section === "lecture" ? "Lec" : "D" + (se.diveIndex || ""))}`;
@@ -857,6 +870,7 @@
           se.section = "dive";
         }}, [el("option", { value: "" }, "— choose —"), ...types.map(t =>
           el("option", { value: t.code, selected: se.adhocType === t.code ? "selected" : null }, t.name))])));
+        if (!existing) specific.appendChild(el("p", { class: "muted small", style: "margin-top:-6px", text: "Creates a 2-dive boat trip. Set Start to 07:00 for the morning boat or 12:00 for the afternoon boat." }));
       } else {
         specific.appendChild(field("Module", el("select", { onchange: e => { se.moduleCode = e.target.value; }},
           [el("option", { value: "" }, "— choose —"), ...S.modules().map(m =>
@@ -921,7 +935,12 @@
       const cs = conflictsFor(se, existing ? [existing.id] : []);
       if (cs.length) return toast("Can't save — " + conflictMsg(cs));
       const doSave = () => {
-        if (existing) S.updateSession(existing.id, se); else S.addSession(se);
+        if (existing) S.updateSession(existing.id, se);
+        else if (se.kind === "adhoc") {
+          // a flexible dive is a 2-dive boat trip (one groupId), like a module's dive block
+          const g = S.uid("grp");
+          for (let i = 1; i <= 2; i++) S.addSession(Object.assign({}, se, { id: null, groupId: g, section: "dive", diveIndex: i }));
+        } else S.addSession(se);
         closeModal(); render();
       };
       if (existing && se.kind === "module") {
