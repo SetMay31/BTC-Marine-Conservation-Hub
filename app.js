@@ -402,7 +402,7 @@
            <div class="pt-sub">${esc(stu.name)} &nbsp;·&nbsp; ${esc(fmtLong(start))} → ${esc(fmtLong(end))}${stu.departure ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
          </div>
        </div>
-       <div class="pt-legend">${lg("land", "Lecture / land")} ${lg("dive", "Dive")} ${lg("snorkel", "Snorkel")} ${lg("survey", "Survey")} ${lg("adhoc", "Flexible")}</div>
+       <div class="pt-legend">${lg("land", "Lecture")} ${lg("dive", "Dive")} ${lg("snorkel", "Snorkel")}</div>
        <table class="pt-cal"><thead><tr>${DOW.map(d => `<th>${d}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` });
     document.body.appendChild(sheet);
     const cleanup = () => { sheet.remove(); window.removeEventListener("afterprint", cleanup); };
