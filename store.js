@@ -295,6 +295,13 @@ const Store = (() => {
     const divesDone = needDives === 0 ? true : (dives.length >= needDives && dives.every(s => isPastOrToday(s.date)));
     const elearning = elearnDone(stu, mod);
     const cert = !!(stu.certs && stu.certs[moduleCode] && stu.certs[moduleCode].issued);
+    // A certified module is complete by definition (you can't certify without
+    // finishing the stages), even if the work predates this app / has no sessions.
+    if (cert) return {
+      elearning: mod.elearn ? true : null, classroom: true, dives: true, cert: true,
+      needDives, divesScheduled: dives.length, lectureScheduled: lectures.length > 0,
+      ready: true, pct: 100, scheduledAny: sess.length > 0
+    };
     const stages = [];
     if (mod.elearn) stages.push(elearning);
     stages.push(classroom);
