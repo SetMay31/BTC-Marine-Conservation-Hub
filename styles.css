@@ -239,6 +239,8 @@ td.center, th.center { text-align: center; }
 .dash-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); }
 .list-line { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
 .list-line:last-child { border-bottom: 0; }
+.link-name { cursor: pointer; color: var(--accent-2); font-weight: 600; }
+.link-name:hover { text-decoration: underline; }
 
 /* ===== Schedule (week grid) ===== */
 .sched-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }

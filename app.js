@@ -234,11 +234,11 @@
     ]));
 
     grid.appendChild(dashCard("E-learning outstanding (dives coming)", elOutstanding.length
-      ? elOutstanding.slice(0, 12).map(x => line(x.s.name, x.mod.code))
+      ? elOutstanding.slice(0, 12).map(x => studentLine(x.s, x.mod.code))
       : [emptyLine("All caught up")]));
 
     grid.appendChild(dashCard("On site now", onSite.length
-      ? onSite.slice(0, 15).map(s => line(s.name, courseBadgeText(s)))
+      ? onSite.slice(0, 15).map(s => studentLine(s, courseBadgeText(s)))
       : [emptyLine("No students on site")]));
 
     grid.appendChild(dashCard("⚠️ Needs staff assigned", noStaff.length
@@ -246,11 +246,11 @@
       : [emptyLine("All sessions staffed")]));
 
     grid.appendChild(dashCard("⚠️ Prerequisite warnings", prereqWarn.length
-      ? prereqWarn.map(s => line(s.name, "check prereqs"))
+      ? prereqWarn.map(s => studentLine(s, "check prereqs"))
       : [emptyLine("No prerequisite issues")]));
 
     grid.appendChild(dashCard("⚠️ Incomplete compliance", compInc.length
-      ? compInc.map(s => line(s.name, complianceMissing(s)))
+      ? compInc.map(s => studentLine(s, complianceMissing(s)))
       : [emptyLine("All compliance complete")]));
 
     root.appendChild(grid);
@@ -258,6 +258,11 @@
   const stat = (n, l) => el("div", { class: "stat" }, [el("div", { class: "n", text: String(n) }), el("div", { class: "l", text: l })]);
   const dashCard = (title, lines) => el("div", { class: "card" }, [el("h3", { text: title }), ...lines]);
   const line = (a, b) => el("div", { class: "list-line" }, [el("span", { text: a }), el("span", { class: "muted small", text: b })]);
+  // Like line(), but the student's name is a clickable link that opens their card.
+  const studentLine = (stu, b) => el("div", { class: "list-line" }, [
+    el("span", { class: "link-name", title: "Open " + stu.name + "'s card", onclick: () => openStudentModal(stu.id), text: stu.name }),
+    el("span", { class: "muted small", text: b })
+  ]);
   const emptyLine = t => el("div", { class: "muted small", text: t });
   function complianceMissing(s) {
     const c = s.compliance || {}; const miss = [];
