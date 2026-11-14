@@ -168,7 +168,8 @@
     const today = todayISO();
     const weekEnd = addDays(today, 7);
 
-    const onSite = studs.filter(isCurrent);   // respects the Departed flag
+    const onSite = studs.filter(isCurrent);          // arrived, not departed/left
+    const active = studs.filter(s => !s.departed);   // current roster (on-site + upcoming), excludes departed
     const upcoming = S.sessions().filter(s => s.date >= today && s.date < weekEnd);
     const certsThisMonth = [];
     studs.forEach(s => Object.entries(s.certs || {}).forEach(([mc, c]) => {
@@ -187,14 +188,14 @@
       });
     });
 
-    // prereq warnings
-    const prereqWarn = studs.filter(s => (s.courses || []).some(cc => {
+    // prereq warnings (active students only)
+    const prereqWarn = active.filter(s => (s.courses || []).some(cc => {
       const c = S.courseByCode(cc);
       return c && c.prereq && !meetsPrereqHeuristic(s, c);
     }));
 
-    // compliance incomplete
-    const compInc = studs.filter(s => !(s.compliance && s.compliance.medical && s.compliance.waiver && s.compliance.cdPaperwork));
+    // compliance incomplete (active students only — departed students' compliance is moot)
+    const compInc = active.filter(s => !(s.compliance && s.compliance.medical && s.compliance.waiver && s.compliance.cdPaperwork));
 
     // sessions missing staff (non-adhoc)
     const noStaff = upcoming.filter(se => !se.staff && se.kind !== "adhoc");
@@ -209,7 +210,7 @@
       stat(upcoming.length, "Sessions this week"),
       stat(certsThisMonth.length, "Certs this month"),
       stat(elOutstanding.length, "E-learning due"),
-      stat(studs.length, "Active students")
+      stat(active.length, "Active students")
     ]));
 
     const grid = el("div", { class: "dash-grid" });
