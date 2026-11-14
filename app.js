@@ -251,8 +251,9 @@
       ? elOutstanding.slice(0, 12).map(x => studentLine(x.s, x.mod.code))
       : [emptyLine("All caught up")]));
 
-    grid.appendChild(dashCard("On site now", onSite.length
-      ? onSite.slice(0, 15).map(s => studentLine(s, courseBadgeText(s)))
+    const onSiteSorted = onSite.slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" }));
+    grid.appendChild(dashCard("On site now", onSiteSorted.length
+      ? onSiteSorted.slice(0, 15).map(s => studentLine(s, courseSummaryText(s)))
       : [emptyLine("No students on site")]));
 
     grid.appendChild(dashCard("⚠️ Needs staff assigned", noStaff.length
@@ -1235,6 +1236,17 @@
   function courseBadgeText(s) {
     return (s.courses || []).map(c => (S.courseByCode(c) || {}).name).filter(Boolean).join(" · ");
   }
+  // Concise course label for compact lists: for stacked programmes show only the
+  // top of the stack (e.g. CS·RS·MC·SD → "Scientific Diver"), plus any add-ons.
+  function courseSummaryText(s) {
+    const courses = (s.courses || []).map(c => S.courseByCode(c)).filter(Boolean);
+    const progs = courses.filter(c => c.kind === "program");
+    const others = courses.filter(c => c.kind !== "program");
+    const covered = new Set();
+    progs.forEach(p => { let c = p.stacksOn; while (c) { covered.add(c); const pr = S.courseByCode(c); c = pr ? pr.stacksOn : null; } });
+    const tops = progs.filter(p => !covered.has(p.code));
+    return [...tops, ...others].map(c => c.name).join(" · ");
+  }
 
   function openStudentModal(id) {
     const existing = id ? S.studentById(id) : null;
@@ -1476,7 +1488,16 @@
     return el("span", { class: cls + (onClick ? "" : ""), title: title || label, style: onClick ? "cursor:pointer" : "",
       onclick: onClick || null, text: state ? "✓" : label });
   }
-  function reopenStudent(id) { closeModal(); openStudentModal(id); }
+  // Reopen the student modal, preserving the scroll position so a manager can
+  // click several stage dots (E/C/D/✓) in a row without the view jumping to top.
+  // The scroll container is the .modal box itself (overflow:auto), not .modal-body.
+  function reopenStudent(id) {
+    const prev = document.querySelector(".modal");
+    const top = prev ? prev.scrollTop : 0;
+    closeModal(); openStudentModal(id);
+    const next = document.querySelector(".modal");
+    if (next) { next.scrollTop = top; requestAnimationFrame(() => { next.scrollTop = top; }); }
+  }
 
   function indProjNatureLabel(k) { return k === "dive" ? "Dive" : k === "selfstudy" ? "Self-study" : "Land session"; }
   // Add a flexible Independent Project block (dive / land / self-study) or the

@@ -237,8 +237,9 @@ td.center, th.center { text-align: center; }
 .stat .n { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
 .stat .l { font-size: .78rem; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .03em; }
 .dash-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); }
-.list-line { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
+.list-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
 .list-line:last-child { border-bottom: 0; }
+.list-line > span:last-child { text-align: right; flex-shrink: 0; max-width: 60%; }
 .link-name { cursor: pointer; color: var(--accent-2); font-weight: 600; }
 .link-name:hover { text-decoration: underline; }
 
