@@ -1053,7 +1053,7 @@
      STUDENTS
      ===================================================================== */
   function isCurrent(s) {
-    if (s.archived) return false;
+    if (s.archived || s.departed) return false;
     const t = todayISO();
     if (s.arrival && s.arrival > t) return false;
     if (s.departure && s.departure < t) return false;
@@ -1104,6 +1104,7 @@
         el("div", { class: "progress-bar", style: "margin:8px 0" }, el("i", { style: `width:${prog.pct}%` })),
         el("div", { class: "row small" }, [
           isCurrent(s) ? el("span", { class: "pill good", text: "● Current" }) : null,
+          (s.departed && !s.archived) ? el("span", { class: "pill muted2", text: "departed" }) : null,
           s.archived ? el("span", { class: "pill muted2", text: "archived" }) : null,
           s.startLevel && s.startLevel.cert ? el("span", { class: "pill muted2", text: s.startLevel.cert }) : null,
           complianceMissing(s) ? el("span", { class: "pill warn", text: "⚠ " + complianceMissing(s) }) : el("span", { class: "pill good", text: "✓ compliance" })
@@ -1208,7 +1209,8 @@
       checkbox("Liability waiver complete", s.compliance.waiver, v => s.compliance.waiver = v),
       checkbox("Conservation Diver paperwork complete", s.compliance.cdPaperwork, v => s.compliance.cdPaperwork = v),
       field("Notes", el("textarea", { rows: "2", oninput: e => s.note = e.target.value }, s.note || "")),
-      existing ? checkbox("Archived", s.archived, v => s.archived = v) : null
+      checkbox("Departed (no longer on site — hidden from “Current”)", s.departed, v => s.departed = v),
+      existing ? checkbox("Archived (hidden everywhere except “All”)", s.archived, v => s.archived = v) : null
     ]);
 
     const body = [tabProfile];
