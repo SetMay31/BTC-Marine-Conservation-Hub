@@ -460,7 +460,7 @@
         S.updateSession(id, { date: dISO }); render();
       });
       col.appendChild(bodyEl);
-      col.appendChild(el("button", { class: "btn btn-sm day-add", onclick: () => openSessionModal(null, dISO) }, "+ add"));
+      col.appendChild(el("button", { class: "btn btn-sm day-add", onclick: () => openDayAdd(dISO) }, "+ add"));
       grid.appendChild(col);
     }
     root.appendChild(grid);
@@ -698,8 +698,24 @@
     return rows;
   }
 
+  // Day "+ add" on the schedule: choose what to add on that day. Scheduling a
+  // whole module is the most common need, so it's the primary option.
+  function openDayAdd(dISO) {
+    modal({
+      title: "Add to " + fmtDay(dISO),
+      body: [
+        el("p", { class: "muted small", text: "What would you like to schedule on this day?" }),
+        el("div", { class: "row", style: "gap:10px;flex-wrap:wrap;margin-top:8px" }, [
+          el("button", { class: "btn btn-primary", onclick: () => { closeModal(); openScheduleModule({ date: dISO }); } }, "+ Schedule module"),
+          el("button", { class: "btn", onclick: () => { closeModal(); openSessionModal(null, dISO); } }, "+ Session / survey")
+        ]),
+        el("p", { class: "muted small", style: "margin-top:10px", text: "A module lays out its lecture(s) and dives per template; a session is a single lecture, dive, survey or ad-hoc outing." })
+      ],
+      actions: [{ label: "Cancel", onClick: closeModal }]
+    });
+  }
   function openScheduleModule(preset) {
-    let moduleCode = (preset && preset.moduleCode) || "", date = todayISO(), staffName = "", assist = "", shadow = "", surveyLead = "";
+    let moduleCode = (preset && preset.moduleCode) || "", date = (preset && preset.date) || todayISO(), staffName = "", assist = "", shadow = "", surveyLead = "";
     let arOption = "dives", arProgramme = true, individualSites = false;
     const sites = {};               // all | d0,d1,...
     const selectedStudents = new Set();
