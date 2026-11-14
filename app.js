@@ -399,12 +399,20 @@
   function printStudentTimetable(stu) {
     const sess = S.sessions().filter(s => (s.studentIds || []).includes(stu.id)).sort(byDateTime);
     if (!sess.length && !stu.arrival) { toast("No schedule or dates to build a timetable for " + stu.name); return; }
-    const dates = sess.map(s => s.date);
-    const start = stu.arrival || (dates.length ? dates[0] : todayISO());
-    const end = stu.departure || (dates.length ? dates[dates.length - 1] : start);
-    const lastSun = addDays(mondayOf(end), 6);
+    const dates = sess.map(s => s.date).sort();
+    const firstSess = dates[0], lastSess = dates[dates.length - 1];
+    // Stay window (for the banner + shading), falling back to the session span.
+    const start = stu.arrival || firstSess || todayISO();
+    let end = stu.departure || lastSess || start;
+    const usedDeparture = !!(stu.departure && stu.departure >= start);
+    if (end < start) end = lastSess && lastSess >= start ? lastSess : start;   // guard bad departure
+    // The grid must always cover the whole stay AND every scheduled session, so a
+    // session outside the stated arrival→departure window is never clipped.
+    const gridStart = [start, firstSess].filter(Boolean).sort()[0] || start;
+    const gridEnd = [end, lastSess].filter(Boolean).sort().pop() || end;
+    const lastSun = addDays(mondayOf(gridEnd), 6);
     const weeks = [];
-    for (let d = mondayOf(start); d <= lastSun; d = addDays(d, 7)) weeks.push(d);
+    for (let d = mondayOf(gridStart); d <= lastSun; d = addDays(d, 7)) weeks.push(d);
 
     const sessHtml = se => {
       const col = PT_COLORS[se.medium || "dive"] || PT_COLORS.dive;
@@ -427,7 +435,7 @@
          <img src="logo.png" alt="Black Turtle Conservation" onerror="this.style.display='none'" />
          <div class="pt-banner-text">
            <div class="pt-title">Black Turtle Conservation — Student Timetable</div>
-           <div class="pt-sub">${esc(stu.name)} &nbsp;·&nbsp; ${esc(fmtLong(start))} → ${esc(fmtLong(end))}${stu.departure ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
+           <div class="pt-sub">${esc(stu.name)} &nbsp;·&nbsp; ${esc(fmtLong(start))} → ${esc(fmtLong(end))}${usedDeparture ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
          </div>
        </div>
        <div class="pt-legend">${lg("land", "Lecture")} ${lg("dive", "Dive")} ${lg("snorkel", "Snorkel")}</div>
@@ -564,6 +572,29 @@
       });
       root.appendChild(el("div", { class: "staff-grid" }, tbl));
     }
+  }
+
+  // Generic searchable single-select combobox. `items` should already be sorted;
+  // getLabel(item) is both the shown text and what's matched. Self-updates its
+  // displayed value on pick (for modals that don't re-render on selection).
+  function comboPicker(items, getLabel, current, onPick, placeholder) {
+    let cur = current;
+    const wrap = el("div", { class: "combo" });
+    const input = el("input", { class: "combo-input", placeholder: placeholder || "Search…", value: cur ? getLabel(cur) : "" });
+    const list = el("div", { class: "combo-list hidden" });
+    function draw(term) {
+      list.innerHTML = "";
+      const t = (term || "").toLowerCase().trim();
+      const matches = items.filter(it => !t || getLabel(it).toLowerCase().includes(t));
+      if (!matches.length) { list.appendChild(el("div", { class: "combo-item muted", text: "No matches" })); return; }
+      matches.forEach(it => list.appendChild(el("div", { class: "combo-item" + (cur && cur === it ? " on" : ""),
+        onmousedown: e => { e.preventDefault(); cur = it; input.value = getLabel(it); list.classList.add("hidden"); onPick(it); } }, getLabel(it))));
+    }
+    input.addEventListener("focus", () => { input.value = ""; list.classList.remove("hidden"); draw(""); });
+    input.addEventListener("input", () => { list.classList.remove("hidden"); draw(input.value); });
+    input.addEventListener("blur", () => setTimeout(() => { list.classList.add("hidden"); if (document.activeElement !== input) input.value = cur ? getLabel(cur) : ""; }, 160));
+    wrap.appendChild(input); wrap.appendChild(list);
+    return wrap;
   }
 
   // Searchable student picker for the student calendar. `students` should already
@@ -789,10 +820,11 @@
     const selectedStudents = new Set();
     if (preset && preset.studentId) selectedStudents.add(preset.studentId);
 
-    const moduleSel = el("select", { onchange: e => { moduleCode = e.target.value; refreshStudents(); rebuildAR(); rebuildSites(); checkModClashes(); } },
-      [el("option", { value: "" }, "— choose a module —"),
-       ...S.modules().map(m => el("option", { value: m.code }, `${m.name} (${m.agency})`))]);
-    if (moduleCode) moduleSel.value = moduleCode;
+    const modItems = S.modules().slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" }));
+    const moduleSel = comboPicker(modItems, m => `${m.name} (${m.agency})`,
+      moduleCode ? S.moduleByCode(moduleCode) : null,
+      m => { moduleCode = m.code; refreshStudents(); rebuildAR(); rebuildSites(); checkModClashes(); },
+      "Search a module…");
 
     const studPicker = makeStudentPicker(
       () => moduleCode ? rosterStudents().filter(s => S.studentModuleCodes(s).includes(moduleCode)) : null,
