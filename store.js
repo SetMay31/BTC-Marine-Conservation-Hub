@@ -327,7 +327,20 @@ const Store = (() => {
     const boats = ss => [...new Set(ss.map(s => s.groupId || s.id))].length;
     const scheduled = boats(sess);
     const done = boats(sess.filter(s => isPastOrToday(s.date)));
-    return { scheduled, done, need: needCount, complete: done >= needCount };
+    const manual = !!(stu.compDone && stu.compDone[compCode]);
+    return { scheduled, done, need: needCount, manual, complete: manual || done >= needCount };
+  }
+  // Independent Project is flexible (dive / land / self-study blocks + a final
+  // presentation), not a fixed 2-dive boat. Completion = manually marked, or the
+  // presentation has happened.
+  function indProjStatus(stu) {
+    const sess = studentCompSessions(stu.id, "INDPROJ")
+      .slice().sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
+    const presentations = sess.filter(s => s.indProjKind === "presentation");
+    const presentationScheduled = presentations.length > 0;
+    const presentationDone = presentations.some(s => isPastOrToday(s.date));
+    const manual = !!(stu.compDone && stu.compDone.INDPROJ);
+    return { blocks: sess, presentationScheduled, presentationDone, manual, complete: manual || presentationDone };
   }
 
   function courseProgress(stu) {
@@ -374,6 +387,13 @@ const Store = (() => {
     if (done) stu.elearning[elearnKey] = true; else delete stu.elearning[elearnKey];
     save();
   }
+  // Manually mark a flexible-dive / Independent-Project requirement complete,
+  // for work done before the switch to this platform (keyed by component code).
+  function setCompDone(studentId, compCode, done) {
+    const stu = studentById(studentId); if (!stu) return; stu.compDone = stu.compDone || {};
+    if (done) stu.compDone[compCode] = true; else delete stu.compDone[compCode];
+    save();
+  }
   // Manually mark a module stage ("classroom" or "dives") complete, for students
   // whose lectures / dives happened before the switch to this platform and were
   // never scheduled here. Works like setElearning — never touches the cert flag.
@@ -406,10 +426,10 @@ const Store = (() => {
     programChain, courseModuleCodes, courseDiveComps, courseItemsOrdered, courseExtras,
     studentModuleCodes, studentDiveReqs, studentExtras,
     studentModuleSessions, studentCompSessions,
-    moduleStatus, diveReqStatus, courseProgress, staffOff, staffCanTeach,
+    moduleStatus, diveReqStatus, indProjStatus, courseProgress, staffOff, staffCanTeach,
     todayISO, isPastOrToday,
     upsertStudent, deleteStudent, addSession, updateSession, deleteSession,
-    setCert, setElearning, setManualStage, addStaffOff, removeStaffOff, addStaff, setStaffCanTeach,
+    setCert, setElearning, setManualStage, setCompDone, addStaffOff, removeStaffOff, addStaff, setStaffCanTeach,
     saveCourse, saveModule, setPassword, exportJSON, importJSON
   };
 })();

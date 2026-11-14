@@ -43,6 +43,20 @@
     H = Math.min(23, (H || 0) + h);
     return String(H).padStart(2, "0") + ":" + String(M || 0).padStart(2, "0");
   }
+  function addMinutesHHMM(hhmm, mins) {
+    const [H, M] = (hhmm || "00:00").split(":").map(Number);
+    let t = Math.max(0, Math.min(23 * 60 + 59, (H || 0) * 60 + (M || 0) + mins));
+    return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  }
+  function diffMinutes(a, b) {
+    const p = s => { const [H, M] = (s || "0:0").split(":").map(Number); return (H || 0) * 60 + (M || 0); };
+    return Math.max(0, p(b) - p(a));
+  }
+  function fmtDuration(min) {
+    if (!min) return "0h";
+    const h = Math.floor(min / 60), m = min % 60;
+    return (h ? h + "h" : "") + (m ? (h ? " " : "") + m + "m" : "");
+  }
   function dayLabel(dISO) {
     const t = todayISO();
     if (dISO === t) return "Today";
@@ -698,6 +712,36 @@
     return rows;
   }
 
+  // Reusable student picker: a search box + chips, restricted to whatever the
+  // caller deems eligible (current students enrolled for this module/component).
+  // getEligible() returns an array, or null to show the "pick something first" prompt.
+  function makeStudentPicker(getEligible, isOn, onToggle, opts = {}) {
+    opts = Object.assign({ empty: "No current students are enrolled for this.", prompt: "Choose an option first.", decorate: null }, opts);
+    let term = "";
+    const chips = el("div", { class: "chips" });
+    const search = el("input", { placeholder: "Search students…", style: "margin:2px 0 6px", oninput: e => { term = e.target.value.toLowerCase().trim(); redraw(); } });
+    function redraw() {
+      chips.innerHTML = "";
+      const elig = getEligible();
+      if (elig == null) { chips.appendChild(el("span", { class: "muted small", text: opts.prompt })); return; }
+      if (!elig.length) { chips.appendChild(el("span", { class: "muted small", text: opts.empty })); return; }
+      const list = elig.filter(s => !term || (s.name || "").toLowerCase().includes(term));
+      if (!list.length) { chips.appendChild(el("span", { class: "muted small", text: "No matches." })); return; }
+      list.forEach(s => {
+        const dec = opts.decorate ? (opts.decorate(s) || {}) : {};
+        const chip = el("div", { class: "chip" + (isOn(s) ? " on" : "") + (dec.cls ? " " + dec.cls : ""),
+          onclick: () => { onToggle(s); redraw(); } }, s.name + (dec.suffix || ""));
+        chips.appendChild(chip);
+      });
+    }
+    const wrap = el("div", {}, [search, chips]);
+    redraw();
+    return { wrap, redraw };
+  }
+  // Current roster = enrolled and not departed/archived (archived already excluded
+  // by S.students()); upcoming not-yet-arrived students stay schedulable.
+  const rosterStudents = () => S.students().filter(s => !s.departed);
+
   // Day "+ add" on the schedule: choose what to add on that day. Scheduling a
   // whole module is the most common need, so it's the primary option.
   function openDayAdd(dISO) {
@@ -726,20 +770,15 @@
        ...S.modules().map(m => el("option", { value: m.code }, `${m.name} (${m.agency})`))]);
     if (moduleCode) moduleSel.value = moduleCode;
 
-    const studentsBox = el("div", { class: "chips" });
-    function refreshStudents() {
-      studentsBox.innerHTML = "";
-      if (!moduleCode) { studentsBox.appendChild(el("span", { class: "muted small", text: "Pick a module first." })); return; }
-      const eligible = S.students().filter(s => S.studentModuleCodes(s).includes(moduleCode));
-      if (!eligible.length) { studentsBox.appendChild(el("span", { class: "muted small", text: "No enrolled students need this module." })); return; }
-      eligible.forEach(s => {
-        const certified = s.certs && s.certs[moduleCode] && s.certs[moduleCode].issued;
-        const chip = el("div", { class: "chip" + (certified ? " warnflag" : "") + (selectedStudents.has(s.id) ? " on" : ""),
-          onclick: () => { if (selectedStudents.has(s.id)) { selectedStudents.delete(s.id); chip.classList.remove("on"); } else { selectedStudents.add(s.id); chip.classList.add("on"); } checkModClashes(); }
-        }, s.name + (certified ? " ✓already" : ""));
-        studentsBox.appendChild(chip);
-      });
-    }
+    const studPicker = makeStudentPicker(
+      () => moduleCode ? rosterStudents().filter(s => S.studentModuleCodes(s).includes(moduleCode)) : null,
+      s => selectedStudents.has(s.id),
+      s => { if (selectedStudents.has(s.id)) selectedStudents.delete(s.id); else selectedStudents.add(s.id); checkModClashes(); },
+      { prompt: "Pick a module first.", empty: "No current students are enrolled in a course that includes this module.",
+        decorate: s => (s.certs && s.certs[moduleCode] && s.certs[moduleCode].issued) ? { cls: "warnflag", suffix: " ✓already" } : null }
+    );
+    const studentsBox = studPicker.wrap;
+    const refreshStudents = () => studPicker.redraw();
     refreshStudents();
 
     const arBox = el("div");
@@ -880,16 +919,18 @@
         }}, [el("option", { value: "" }, "— choose —"), ...surveys.map(c =>
           el("option", { value: c.code, selected: se.courseCode === c.code ? "selected" : null }, c.name))])));
       } else if (se.kind === "adhoc") {
-        const types = S.diveComponents();
+        // Independent Project is scheduled from the student card (flexible blocks
+        // + presentation), not as a 2-dive boat, so it's excluded here.
+        const types = S.diveComponents().filter(t => t.code !== "INDPROJ");
         specific.appendChild(field("Dive / flexible type", el("select", { onchange: e => {
           const t = types.find(x => x.code === e.target.value);
           se.adhocType = t ? t.code : ""; se.adhocLabel = t ? t.name : ""; se.medium = t ? t.medium : "dive";
-          se.section = "dive";
+          se.section = "dive"; buildStudents();
         }}, [el("option", { value: "" }, "— choose —"), ...types.map(t =>
           el("option", { value: t.code, selected: se.adhocType === t.code ? "selected" : null }, t.name))])));
         if (!existing) specific.appendChild(el("p", { class: "muted small", style: "margin-top:-6px", text: "Creates a 2-dive boat trip. Set Start to 07:00 for the morning boat or 12:00 for the afternoon boat." }));
       } else {
-        specific.appendChild(field("Module", el("select", { onchange: e => { se.moduleCode = e.target.value; }},
+        specific.appendChild(field("Module", el("select", { onchange: e => { se.moduleCode = e.target.value; buildStudents(); }},
           [el("option", { value: "" }, "— choose —"), ...S.modules().map(m =>
             el("option", { value: m.code, selected: se.moduleCode === m.code ? "selected" : null }, m.name))])));
         specific.appendChild(field("Section", el("select", { onchange: e => {
@@ -900,23 +941,23 @@
     }
     rebuild();
 
-    // students (hidden for survey)
-    const studentsBox = el("div", { class: "chips" });
-    function buildStudents() {
-      studentsBox.innerHTML = "";
-      S.students().forEach(s => {
-        const on = (se.studentIds || []).includes(s.id);
-        const chip = el("div", { class: "chip" + (on ? " on" : ""), onclick: () => {
-          se.studentIds = se.studentIds || [];
-          if (se.studentIds.includes(s.id)) se.studentIds = se.studentIds.filter(x => x !== s.id);
-          else se.studentIds.push(s.id);
-          chip.classList.toggle("on");
-          checkClashes();
-        }}, s.name);
-        studentsBox.appendChild(chip);
-      });
+    // students (hidden for survey) — only current students enrolled for this
+    // module / flexible component; already-selected students stay visible.
+    function sessionEligible() {
+      let base;
+      if (se.kind === "adhoc") base = se.adhocType ? rosterStudents().filter(s => S.studentDiveReqs(s).some(r => r.code === se.adhocType)) : null;
+      else if (se.kind === "module") base = se.moduleCode ? rosterStudents().filter(s => S.studentModuleCodes(s).includes(se.moduleCode)) : rosterStudents();
+      else base = rosterStudents();
+      if (base == null) return null;
+      const sel = S.students(true).filter(s => (se.studentIds || []).includes(s.id) && !base.some(b => b.id === s.id));
+      return [...base, ...sel];
     }
-    buildStudents();
+    const studPicker = makeStudentPicker(sessionEligible,
+      s => (se.studentIds || []).includes(s.id),
+      s => { se.studentIds = se.studentIds || []; if (se.studentIds.includes(s.id)) se.studentIds = se.studentIds.filter(x => x !== s.id); else se.studentIds.push(s.id); checkClashes(); },
+      { prompt: "Pick a flexible type first to see eligible students.", empty: "No current students are enrolled for this." });
+    const studentsBox = studPicker.wrap;
+    const buildStudents = () => studPicker.redraw();
 
     const body = [
       (existing && se.kind === "module") ? el("button", { class: "btn btn-primary", style: "margin-bottom:12px;width:100%",
@@ -1007,18 +1048,19 @@
     const studentIds = new Set();
     group.forEach(s => (s.studentIds || []).forEach(id => studentIds.add(id)));
 
-    const studentsBox = el("div", { class: "chips" });
-    function buildStudents() {
-      studentsBox.innerHTML = "";
-      S.students().forEach(s => {
-        const on = studentIds.has(s.id);
-        studentsBox.appendChild(el("div", { class: "chip" + (on ? " on" : ""), onclick: () => {
-          if (studentIds.has(s.id)) studentIds.delete(s.id); else studentIds.add(s.id);
-          buildStudents();
-        }}, s.name));
-      });
-    }
-    buildStudents();
+    const mcode = mod ? mod.code : anchor.moduleCode;
+    const grpPicker = makeStudentPicker(
+      () => {
+        const base = rosterStudents().filter(s => !mcode || S.studentModuleCodes(s).includes(mcode));
+        // keep already-assigned students visible (even if departed) so they can be removed
+        const extra = S.students(true).filter(s => studentIds.has(s.id) && !base.some(b => b.id === s.id));
+        return [...base, ...extra];
+      },
+      s => studentIds.has(s.id),
+      s => { if (studentIds.has(s.id)) studentIds.delete(s.id); else studentIds.add(s.id); },
+      { empty: "No current students are enrolled in a course that includes this module." }
+    );
+    const studentsBox = grpPicker.wrap;
 
     const body = [
       el("div", { class: "warn-banner", style: "background:var(--accent-soft);color:var(--ink);border-color:var(--accent-2)",
@@ -1297,23 +1339,66 @@
       ]));
     });
 
-    // Required dive components (no cert)
-    if (reqs.length) {
+    // Required dive components (no cert) — Independent Project handled separately below
+    const diveReqs = reqs.filter(r => r.code !== "INDPROJ");
+    if (diveReqs.length) {
       wrap.appendChild(el("h4", { text: "Required dives", style: "margin-top:16px" }));
-      reqs.forEach(r => {
+      diveReqs.forEach(r => {
         const st = S.diveReqStatus(stu, r.code, r.count);
+        const acts = el("div", { class: "row", style: "gap:8px" }, [
+          el("span", { class: "small " + (st.complete ? "muted" : ""), text: st.complete ? (st.manual ? "✓ complete (manual)" : "✓ complete") : `${st.done}/${r.count} done · ${st.scheduled} scheduled` })
+        ]);
+        if (st.manual) {
+          acts.appendChild(el("button", { class: "btn btn-sm btn-ghost", title: "Undo manual completion", onclick: () => { S.setCompDone(stu.id, r.code, false); reopenStudent(stu.id); } }, "undo"));
+        } else if (!st.complete) {
+          acts.appendChild(el("button", { class: "btn btn-sm btn-ghost", onclick: () => {
+            closeModal();
+            openSessionModal(null, null, { kind: "adhoc", adhocType: r.code, adhocLabel: r.name,
+              medium: (S.diveCompByCode(r.code) || {}).medium || "dive", section: "dive", studentIds: [stu.id] });
+          } }, "+ schedule"));
+          acts.appendChild(el("button", { class: "btn btn-sm", title: "Mark complete without scheduling (e.g. done before this platform)", onclick: () => { S.setCompDone(stu.id, r.code, true); reopenStudent(stu.id); } }, "mark complete"));
+        }
         wrap.appendChild(el("div", { class: "list-line" }, [
           el("span", {}, `${r.name}${r.count > 1 ? ` ×${r.count}` : ""}`),
-          el("div", { class: "row", style: "gap:8px" }, [
-            el("span", { class: "small " + (st.complete ? "muted" : ""), text: st.complete ? "✓ complete" : `${st.done}/${r.count} done · ${st.scheduled} scheduled` }),
-            !st.complete ? el("button", { class: "btn btn-sm btn-ghost", onclick: () => {
-              closeModal();
-              openSessionModal(null, null, { kind: "adhoc", adhocType: r.code, adhocLabel: r.name,
-                medium: (S.diveCompByCode(r.code) || {}).medium || "dive", section: "dive", studentIds: [stu.id] });
-            } }, "+ schedule") : null
-          ])
+          acts
         ]));
       });
+    }
+
+    // Independent Project — flexible: dive / land / self-study blocks + a final presentation
+    if (reqs.some(r => r.code === "INDPROJ")) {
+      const ip = S.indProjStatus(stu);
+      const totalMin = ip.blocks.reduce((a, b) => a + diffMinutes(b.start, b.end), 0);
+      wrap.appendChild(el("h4", { text: "Independent Project", style: "margin-top:16px" }));
+
+      const ipActs = el("div", { class: "row", style: "gap:8px" }, [
+        el("span", { class: "small " + (ip.complete ? "muted" : ""), text: ip.complete
+          ? (ip.manual ? "✓ complete (manual)" : "✓ complete — presentation done")
+          : `${ip.blocks.length} block${ip.blocks.length !== 1 ? "s" : ""} · ${fmtDuration(totalMin)}` +
+            (ip.presentationScheduled ? " · presentation " + (ip.presentationDone ? "done" : "scheduled") : " · no presentation yet") })
+      ]);
+      if (ip.manual) {
+        ipActs.appendChild(el("button", { class: "btn btn-sm btn-ghost", title: "Undo manual completion", onclick: () => { S.setCompDone(stu.id, "INDPROJ", false); reopenStudent(stu.id); } }, "undo"));
+      } else {
+        ipActs.appendChild(el("button", { class: "btn btn-sm", title: "Mark the Independent Project complete (e.g. done before this platform)", onclick: () => { S.setCompDone(stu.id, "INDPROJ", true); reopenStudent(stu.id); } }, "mark complete"));
+      }
+      wrap.appendChild(el("div", { class: "list-line" }, [el("span", { style: "font-weight:600", text: "Status" }), ipActs]));
+
+      wrap.appendChild(el("div", { class: "row", style: "gap:8px;margin:8px 0" }, [
+        el("button", { class: "btn btn-sm btn-primary", onclick: () => openIndProjBlock(stu, "block") }, "+ add block"),
+        el("button", { class: "btn btn-sm", onclick: () => openIndProjBlock(stu, "presentation") }, "+ presentation")
+      ]));
+
+      if (ip.blocks.length) {
+        ip.blocks.forEach(b => {
+          wrap.appendChild(el("div", { class: "list-line" }, [
+            el("span", { class: "small", text: `${fmtDay(b.date)} ${b.start || ""}–${b.end || ""} · ${b.indProjKind === "presentation" ? "Final presentation" : indProjNatureLabel(b.indProjKind)}` }),
+            el("button", { class: "btn btn-sm btn-ghost", onclick: () => { closeModal(); openSessionModal(b.id); } }, "edit")
+          ]));
+        });
+      } else {
+        wrap.appendChild(el("div", { class: "muted small", text: "No blocks yet — add hourly blocks (dive, land or self-study) and a final presentation, or mark complete if done before this platform." }));
+      }
     }
 
     // CDM extras (Course Assist / Survey Lead)
@@ -1336,6 +1421,52 @@
       onclick: onClick || null, text: state ? "✓" : label });
   }
   function reopenStudent(id) { closeModal(); openStudentModal(id); }
+
+  function indProjNatureLabel(k) { return k === "dive" ? "Dive" : k === "selfstudy" ? "Self-study" : "Land session"; }
+  // Add a flexible Independent Project block (dive / land / self-study) or the
+  // final presentation, scheduled by the hour.
+  function openIndProjBlock(stu, mode) {
+    const isPres = mode === "presentation";
+    let nature = isPres ? "presentation" : "dive";
+    let date = todayISO(), start = isPres ? "09:00" : "07:00", hours = 1, staff = "";
+    const natureSel = el("select", { onchange: e => nature = e.target.value },
+      [["dive", "Dive"], ["land", "Land session"], ["selfstudy", "Self-study"]].map(([v, l]) =>
+        el("option", { value: v, selected: nature === v ? "selected" : null }, l)));
+    const hoursSel = el("select", { onchange: e => hours = Number(e.target.value) },
+      [1, 2, 3, 4, 5, 6].map(h => el("option", { value: h, selected: hours === h ? "selected" : null }, h + (h === 1 ? " hour" : " hours"))));
+    const body = [
+      isPres ? el("p", { class: "muted small", text: "Schedules the final Independent Project presentation." })
+             : field("Nature", natureSel),
+      field("Date", el("input", { type: "date", value: date, oninput: e => date = e.target.value })),
+      el("div", { class: "field-row" }, [
+        field("Start", el("input", { type: "time", value: start, oninput: e => start = e.target.value })),
+        field("Duration", hoursSel)
+      ]),
+      field("Lead staff (optional)", staffSelect(v => staff = v))
+    ];
+    modal({
+      title: (isPres ? "Add presentation — " : "Add Independent Project block — ") + stu.name,
+      body,
+      actions: [
+        { label: "Cancel", onClick: () => reopenStudent(stu.id) },
+        { label: "Add", class: "btn-primary", onClick: () => {
+          const end = addMinutesHHMM(start, hours * 60);
+          const isDive = !isPres && nature === "dive";
+          const label = isPres ? "Ind Project Presentation" : "Ind Project — " + indProjNatureLabel(nature);
+          S.addSession({
+            id: null, kind: "adhoc", adhocType: "INDPROJ", adhocLabel: label,
+            indProjKind: isPres ? "presentation" : nature,
+            studentIds: [stu.id], date, start, end,
+            section: isDive ? "dive" : "lecture",
+            medium: isDive ? "dive" : "land",
+            name: label, staff, groupId: S.uid("grp")
+          });
+          reopenStudent(stu.id);
+          toast(isPres ? "Presentation added" : "Block added");
+        }}
+      ]
+    });
+  }
 
   function toggleCert(stu, mc) {
     const cur = stu.certs && stu.certs[mc] && stu.certs[mc].issued;
