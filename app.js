@@ -168,12 +168,7 @@
     const today = todayISO();
     const weekEnd = addDays(today, 7);
 
-    const onSite = studs.filter(s => {
-      const arr = s.arrival, dep = s.departure;
-      if (arr && arr > today) return false;
-      if (dep && dep < today) return false;
-      return true;
-    });
+    const onSite = studs.filter(isCurrent);   // respects the Departed flag
     const upcoming = S.sessions().filter(s => s.date >= today && s.date < weekEnd);
     const certsThisMonth = [];
     studs.forEach(s => Object.entries(s.certs || {}).forEach(([mc, c]) => {
