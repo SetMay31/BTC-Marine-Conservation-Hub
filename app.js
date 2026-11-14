@@ -1274,7 +1274,7 @@
             `${mod.elearn ? (st.elearning ? "e-learning ✓ · " : "e-learning pending · ") : ""}` +
             `${st.classroom ? "classroom ✓ · " : "classroom pending · "}` +
             `${mod.dives > 0 ? (st.dives ? "dives ✓" : `dives ${st.divesScheduled}/${st.needDives}`) : "no dives"}` +
-            (cert && cert.issued ? ` · certified ${fmtDay(cert.date)}${cert.staff ? " by " + cert.staff : ""}` : "")),
+            (cert && cert.issued ? ` · certified${cert.date ? " " + fmtDay(cert.date) : ""}${cert.staff ? " by " + cert.staff : ""}` : "")),
           (!st.cert && !st.scheduledAny) ? el("button", { class: "btn btn-sm", onclick: () => { closeModal(); openScheduleModule({ moduleCode: mc, studentId: stu.id }); } }, "+ schedule") : null
         ])
       ]));
@@ -1352,22 +1352,22 @@
     if (!studs.length) { root.appendChild(el("div", { class: "empty", text: "No students yet." })); return; }
 
     if (UI.certView === "grid") {
-      // columns = modules that are used by at least one enrolled student
-      const usedModules = [...new Set(studs.flatMap(s => S.studentModuleCodes(s)))];
+      // columns = modules an enrolled student needs OR has a certification for
+      const usedModules = [...new Set(studs.flatMap(s => [...S.studentModuleCodes(s), ...Object.keys(s.certs || {})]))];
       const cols = S.modules().filter(m => usedModules.includes(m.code));
       const wrap = el("div", { class: "table-wrap" });
       const tbl = el("table", { class: "cert-matrix" });
       tbl.appendChild(el("thead", {}, el("tr", {}, [th("Student"), ...cols.map(m => th(m.code))])));
       const tb = el("tbody");
       studs.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
-        const need = new Set(S.studentModuleCodes(s));
+        const need = new Set([...S.studentModuleCodes(s), ...Object.keys(s.certs || {}).filter(mc => s.certs[mc].issued)]);
         const tr = el("tr", {}, [td(s.name)]);
         cols.forEach(m => {
           const cell = el("td", { class: "center" });
           if (!need.has(m.code)) cell.appendChild(el("span", { class: "cell-none", text: "·" }));
           else {
             const c = s.certs && s.certs[m.code];
-            if (c && c.issued) cell.appendChild(el("span", { class: "cell-cert", title: `Certified ${c.date}`, text: "✓" }));
+            if (c && c.issued) cell.appendChild(el("span", { class: "cell-cert", title: c.date ? `Certified ${c.date}` : "Certified", text: "✓" }));
             else {
               const st = S.moduleStatus(s, m.code);
               cell.appendChild(el("span", { class: "cell-prog", text: st.ready ? "ready" : (st.scheduledAny ? st.pct + "%" : "–") }));
@@ -1382,7 +1382,7 @@
     } else {
       const grid = el("div", { class: "grid-cards" });
       studs.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
-        const codes = S.studentModuleCodes(s);
+        const codes = [...new Set([...S.studentModuleCodes(s), ...Object.keys(s.certs || {})])];
         const certified = codes.filter(c => s.certs && s.certs[c] && s.certs[c].issued);
         grid.appendChild(el("div", { class: "card" }, [
           el("div", { class: "spread" }, [el("h3", { text: s.name, style: "margin:0" }),
@@ -1391,7 +1391,7 @@
             const c = s.certs[mc]; const mod = S.moduleByCode(mc);
             return el("div", { class: "list-line" }, [
               el("span", { text: mod ? mod.name : mc }),
-              el("span", { class: "muted small", text: `${fmtDay(c.date)}${c.staff ? " · " + c.staff : ""}` })]);
+              el("span", { class: "muted small", text: [c.date ? fmtDay(c.date) : null, c.staff || null].filter(Boolean).join(" · ") || "certified" })]);
           }) : [el("div", { class: "muted small", text: "No certifications yet" })])
         ]));
       });
@@ -1401,15 +1401,15 @@
 
   function exportMatrix() {
     const studs = S.students(true);
-    const usedModules = [...new Set(studs.flatMap(s => S.studentModuleCodes(s)))];
+    const usedModules = [...new Set(studs.flatMap(s => [...S.studentModuleCodes(s), ...Object.keys(s.certs || {})]))];
     const cols = S.modules().filter(m => usedModules.includes(m.code));
     const rows = [["Student", "Email", "Course(s)", ...cols.map(m => m.name)]];
     studs.forEach(s => {
-      const need = new Set(S.studentModuleCodes(s));
+      const need = new Set([...S.studentModuleCodes(s), ...Object.keys(s.certs || {}).filter(mc => s.certs[mc].issued)]);
       rows.push([s.name, s.email, courseBadgeText(s), ...cols.map(m => {
         if (!need.has(m.code)) return "";
         const c = s.certs && s.certs[m.code];
-        return c && c.issued ? "Certified " + c.date : "";
+        return c && c.issued ? "Certified" + (c.date ? " " + c.date : "") : "";
       })]);
     });
     downloadCSV(rows, "btc-certifications-matrix.csv");
