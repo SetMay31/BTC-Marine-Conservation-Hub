@@ -116,16 +116,67 @@ const Store = (() => {
   function save() {
     try { const prev = localStorage.getItem(KEY); if (prev) { undoStack.push(prev); if (undoStack.length > 50) undoStack.shift(); } }
     catch (e) {}
-    persist();
+    persist(); pushRemote();
   }
   function undo() {
     if (!undoStack.length) return false;
     try { state = JSON.parse(undoStack.pop()); } catch (e) { return false; }
-    persist();
+    persist(); pushRemote();
     return true;
   }
   const canUndo = () => undoStack.length > 0;
   const subscribe = fn => subs.push(fn);
+
+  // ---- Supabase shared sync (single jsonb row, last-write-wins + realtime) ----
+  const ROW_ID = "main";
+  let supa = null, applyingRemote = false, pushTimer = null, lastSyncJSON = null;
+  let syncStatus = window.SUPABASE_CONFIG ? "connecting" : "off";
+  const uiSubs = [];
+  const onUI = fn => uiSubs.push(fn);
+  const notifyUI = () => uiSubs.forEach(fn => { try { fn(); } catch (e) {} });
+  const syncInfo = () => ({ enabled: !!window.SUPABASE_CONFIG, status: syncStatus });
+  function adoptRemote(remote) {
+    applyingRemote = true;
+    state = remote;
+    migrate();                      // reseed catalogue if older; persists locally
+    applyingRemote = false;
+    lastSyncJSON = JSON.stringify(state);
+    notifyUI();
+  }
+  function pushRemote() {
+    if (!supa || applyingRemote) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      const js = JSON.stringify(state); lastSyncJSON = js;
+      supa.from("hub_state").upsert({ id: ROW_ID, data: state, updated_at: new Date().toISOString() })
+        .then(({ error }) => { syncStatus = error ? "error" : "synced"; if (error) console.warn("sync push", error); });
+    }, 700);
+  }
+  function initSupabase() {
+    const cfg = window.SUPABASE_CONFIG;
+    if (!cfg || !cfg.url || !cfg.key || !window.supabase) { syncStatus = "off"; return; }
+    try { supa = window.supabase.createClient(cfg.url, cfg.key); }
+    catch (e) { console.warn("supabase init", e); syncStatus = "error"; notifyUI(); return; }
+    supa.from("hub_state").select("data").eq("id", ROW_ID).maybeSingle().then(({ data, error }) => {
+      if (error) { console.warn("sync load", error); syncStatus = "error"; notifyUI(); }
+      else if (data && data.data) {
+        // first-connect reconciliation: the copy with more content wins (avoids
+        // an emptier device overwriting a fuller one). Realtime is last-write-wins after.
+        const weight = s => ((s.students || []).length + (s.sessions || []).length);
+        if (weight(data.data) >= weight(state)) adoptRemote(data.data);
+        else { lastSyncJSON = null; pushRemote(); }   // local has more → seed remote from local
+        syncStatus = "synced"; notifyUI();
+      }
+      else { lastSyncJSON = null; syncStatus = "synced"; pushRemote(); notifyUI(); }  // no remote yet → seed from local
+      supa.channel("hub").on("postgres_changes",
+        { event: "*", schema: "public", table: "hub_state", filter: "id=eq." + ROW_ID },
+        payload => {
+          const d = payload.new && payload.new.data; if (!d) return;
+          if (JSON.stringify(d) === lastSyncJSON) return;   // ignore our own echo
+          adoptRemote(d);
+        }).subscribe();
+    });
+  }
 
   // ---- getters ----
   const get = () => state;
@@ -322,9 +373,10 @@ const Store = (() => {
   function importJSON(str) { state = JSON.parse(str); save(); }
 
   load();
+  initSupabase();
 
   return {
-    uid, get, save, subscribe, undo, canUndo,
+    uid, get, save, subscribe, undo, canUndo, onUI, syncInfo,
     modules, diveComponents, courses, staff, students, sessions, settings, template,
     moduleByCode, diveCompByCode, courseByCode, staffById, studentById,
     programChain, courseModuleCodes, courseDiveComps, courseItemsOrdered, courseExtras,

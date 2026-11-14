@@ -1702,13 +1702,20 @@
       ])
     ]));
 
+    const sync = S.syncInfo();
+    const syncLabel = !sync.enabled ? "Local only (this browser)"
+      : sync.status === "synced" ? "● Shared sync connected — changes sync across devices"
+      : sync.status === "connecting" ? "○ Connecting to shared database…"
+      : sync.status === "error" ? "⚠ Shared sync error — working locally for now"
+      : "Local only";
     root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
       el("h3", { text: "Data" }),
+      el("div", { class: "small", style: "margin-bottom:8px;color:" + (sync.status === "synced" ? "var(--good)" : sync.status === "error" ? "var(--warn)" : "var(--ink-muted)"), text: syncLabel }),
       el("div", { class: "row" }, [
         el("button", { class: "btn", onclick: () => downloadText(S.exportJSON(), "btc-hub-backup.json") }, "⬇ Export all data (backup)"),
         el("button", { class: "btn", onclick: importData }, "⬆ Import data"),
       ]),
-      el("p", { class: "muted small", style: "margin-top:10px", text: "v1 stores data in this browser. Export regularly as a backup. Shared cross-device data comes when we connect the Supabase backend." })
+      el("p", { class: "muted small", style: "margin-top:10px", text: sync.enabled ? "Data is shared live via the database and also cached in this browser so it works offline, syncing when reconnected. Export is a manual backup." : "Stored in this browser only. Export regularly as a backup." })
     ]));
   }
   function downloadText(text, name) {
@@ -1813,6 +1820,9 @@
   /* ================= BOOT ================= */
   initTheme(); initNav(); initGate();
   S.subscribe(() => { /* data changed elsewhere */ });
+  // re-render when shared data arrives from another device / sync status changes
+  let uiTimer = null;
+  S.onUI(() => { clearTimeout(uiTimer); uiTimer = setTimeout(() => { updateNet(); render(); }, 150); });
   render();
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
