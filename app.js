@@ -566,24 +566,48 @@
     }
   }
 
+  // Searchable student picker for the student calendar. `students` should already
+  // be sorted; shows all on focus, filters as you type, click to pick.
+  function studentCombo(students, current, onPick) {
+    const wrap = el("div", { class: "combo" });
+    const input = el("input", { class: "combo-input", placeholder: "Search student…", value: current ? current.name : "" });
+    const list = el("div", { class: "combo-list hidden" });
+    function draw(term) {
+      list.innerHTML = "";
+      const t = (term || "").toLowerCase().trim();
+      const matches = students.filter(s => !t || (s.name || "").toLowerCase().includes(t));
+      if (!matches.length) { list.appendChild(el("div", { class: "combo-item muted", text: "No matches" })); return; }
+      matches.forEach(s => list.appendChild(el("div", { class: "combo-item" + (current && current.id === s.id ? " on" : ""),
+        onmousedown: e => { e.preventDefault(); onPick(s.id); } }, s.name)));
+    }
+    input.addEventListener("focus", () => { input.value = ""; list.classList.remove("hidden"); draw(""); });
+    input.addEventListener("input", () => { list.classList.remove("hidden"); draw(input.value); });
+    input.addEventListener("blur", () => setTimeout(() => { list.classList.add("hidden"); if (document.activeElement !== input) input.value = current ? current.name : ""; }, 160));
+    wrap.appendChild(input); wrap.appendChild(list);
+    return wrap;
+  }
+
   function renderStudentSchedule(root) {
-    const studs = S.students();
-    const sel = el("select", { onchange: e => { UI.schedStudentId = e.target.value; render(); } },
-      [el("option", { value: "" }, "— choose a student —"),
-       ...studs.map(s => el("option", { value: s.id, selected: UI.schedStudentId === s.id ? "selected" : null }, s.name))]);
-    root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
-      el("label", { text: "Student" }), sel ]));
+    const studs = S.students().slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" }));
     const stu = studs.find(s => s.id === UI.schedStudentId);
+    root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
+      el("label", { text: "Student" }),
+      studentCombo(studs, stu, id => { UI.schedStudentId = id; render(); })
+    ]));
     if (!stu) { root.appendChild(el("div", { class: "empty", text: "Pick a student to see their schedule." })); return; }
 
     const sess = S.sessions().filter(s => (s.studentIds || []).includes(stu.id)).sort(byDateTime);
     const sv = UI.studentView === "calendar" ? "week" : UI.studentView;  // back-compat
     const svBtn = (k, label) => el("button", { class: "btn btn-sm" + (sv === k ? " btn-primary" : ""),
       onclick: () => { UI.studentView = k; render(); } }, label);
-    root.appendChild(el("div", { class: "sched-toolbar" }, [
-      svBtn("list", "List"), svBtn("week", "Week"), svBtn("month", "Month"),
-      el("button", { class: "btn btn-sm", style: "margin-left:auto", onclick: () => printStudentTimetable(stu) }, "⤓ PDF timetable")
-    ]));
+    const jumpTo = dISO => { UI.weekStart = mondayOf(dISO); UI.studentMonth = monthStartOf(dISO); if (sv === "list") UI.studentView = "week"; render(); };
+    const toolbar = el("div", { class: "sched-toolbar" }, [svBtn("list", "List"), svBtn("week", "Week"), svBtn("month", "Month")]);
+    if (sess.length) {
+      toolbar.appendChild(el("button", { class: "btn btn-sm", title: "Jump to the start of their course", onclick: () => jumpTo(sess[0].date) }, "⇤ First module"));
+      toolbar.appendChild(el("button", { class: "btn btn-sm", title: "Jump to the end of their course", onclick: () => jumpTo(sess[sess.length - 1].date) }, "Last module ⇥"));
+    }
+    toolbar.appendChild(el("button", { class: "btn btn-sm", style: "margin-left:auto", onclick: () => printStudentTimetable(stu) }, "⤓ PDF timetable"));
+    root.appendChild(toolbar);
 
     if (!sess.length) { root.appendChild(el("div", { class: "empty", text: "No sessions scheduled for " + stu.name })); return; }
 

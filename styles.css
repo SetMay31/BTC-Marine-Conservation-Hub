@@ -242,6 +242,18 @@ td.center, th.center { text-align: center; }
 .link-name { cursor: pointer; color: var(--accent-2); font-weight: 600; }
 .link-name:hover { text-decoration: underline; }
 
+/* searchable student combobox */
+.combo { position: relative; }
+.combo-input { width: 100%; }
+.combo-list { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px);
+  max-height: 260px; overflow-y: auto; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: var(--shadow-lg); padding: 4px; }
+.combo-list.hidden { display: none; }
+.combo-item { padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: .9rem; }
+.combo-item:hover { background: var(--accent-soft); }
+.combo-item.on { background: var(--accent-soft); font-weight: 600; }
+.combo-item.muted { cursor: default; color: var(--ink-muted); }
+
 /* ===== Schedule (week grid) ===== */
 .sched-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
