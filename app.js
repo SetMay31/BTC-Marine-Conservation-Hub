@@ -1122,7 +1122,7 @@
     const s = existing ? JSON.parse(JSON.stringify(existing)) : {
       id: null, name: "", email: "", phone: "", nationality: "", dob: "",
       emergencyName: "", emergencyPhone: "", arrival: "", departure: "", note: "",
-      courses: [], certs: {}, elearning: {},
+      courses: [], certs: {}, elearning: {}, manual: {},
       startLevel: { cert: "", loggedDives: "", priorModules: [] },
       compliance: { medical: false, waiver: false, cdPaperwork: false }, archived: false
     };
@@ -1259,10 +1259,10 @@
             mod.elearn === "CORALTAX" ? el("span", { class: "pill muted2", text: "shared e-learning" }) : null
           ]),
           el("div", { class: "stages" }, [
-            mod.elearn ? stageDot("E", st.elearning, () => { S.setElearning(stu.id, mod.elearn, !st.elearning); reopenStudent(stu.id); }) : stageDot("E", null),
-            stageDot("C", st.classroom),
-            mod.dives > 0 ? stageDot("D", st.dives) : stageDot("D", null),
-            stageDot("✓", st.cert, () => toggleCert(stu, mc))
+            mod.elearn ? stageDot("E", st.elearning, () => { S.setElearning(stu.id, mod.elearn, !st.elearning); reopenStudent(stu.id); }, "E-learning — click to mark complete") : stageDot("E", null),
+            stageDot("C", st.classroom, () => { S.setManualStage(stu.id, mc, "classroom", !st.manualClassroom); reopenStudent(stu.id); }, st.manualClassroom ? "Classroom marked complete manually — click to undo" : "Classroom — click to mark complete"),
+            mod.dives > 0 ? stageDot("D", st.dives, () => { S.setManualStage(stu.id, mc, "dives", !st.manualDives); reopenStudent(stu.id); }, st.manualDives ? "Dives marked complete manually — click to undo" : "Dives — click to mark complete") : stageDot("D", null),
+            stageDot("✓", st.cert, () => toggleCert(stu, mc), "Certification issued — set manually only")
           ])
         ]),
         el("div", { class: "spread", style: "margin-top:4px" }, [
@@ -1309,9 +1309,9 @@
     }
     return wrap;
   }
-  function stageDot(label, state, onClick) {
+  function stageDot(label, state, onClick, title) {
     const cls = state === null ? "stage-dot na" : (state ? "stage-dot done" : "stage-dot");
-    return el("span", { class: cls + (onClick ? "" : ""), title: label, style: onClick ? "cursor:pointer" : "",
+    return el("span", { class: cls + (onClick ? "" : ""), title: title || label, style: onClick ? "cursor:pointer" : "",
       onclick: onClick || null, text: state ? "✓" : label });
   }
   function reopenStudent(id) { closeModal(); openStudentModal(id); }

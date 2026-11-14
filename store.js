@@ -290,15 +290,21 @@ const Store = (() => {
     const sess = studentModuleSessions(stu.id, moduleCode);
     const lectures = sess.filter(s => s.section === "lecture");
     const dives = sess.filter(s => s.section === "dive");
-    const classroom = lectures.length > 0 && lectures.every(s => isPastOrToday(s.date));
+    // Manual overrides: for returning / pre-platform students whose lectures or
+    // dives happened before the switch and were never scheduled in the app.
+    const man = (stu.manual && stu.manual[moduleCode]) || {};
     const needDives = mod.dives || 0;
-    const divesDone = needDives === 0 ? true : (dives.length >= needDives && dives.every(s => isPastOrToday(s.date)));
+    const classroomAuto = lectures.length > 0 && lectures.every(s => isPastOrToday(s.date));
+    const classroom = !!man.classroom || classroomAuto;
+    const divesAuto = needDives === 0 ? true : (dives.length >= needDives && dives.every(s => isPastOrToday(s.date)));
+    const divesDone = !!man.dives || divesAuto;
     const elearning = elearnDone(stu, mod);
     const cert = !!(stu.certs && stu.certs[moduleCode] && stu.certs[moduleCode].issued);
     // A certified module is complete by definition (you can't certify without
     // finishing the stages), even if the work predates this app / has no sessions.
     if (cert) return {
       elearning: mod.elearn ? true : null, classroom: true, dives: true, cert: true,
+      manualClassroom: !!man.classroom, manualDives: !!man.dives,
       needDives, divesScheduled: dives.length, lectureScheduled: lectures.length > 0,
       ready: true, pct: 100, scheduledAny: sess.length > 0
     };
@@ -309,6 +315,7 @@ const Store = (() => {
     const done = stages.filter(Boolean).length;
     return {
       elearning, classroom, dives: divesDone, cert,
+      manualClassroom: !!man.classroom, manualDives: !!man.dives,
       needDives, divesScheduled: dives.length, lectureScheduled: lectures.length > 0,
       ready: done === stages.length, pct: Math.round((done / stages.length) * 100),
       scheduledAny: sess.length > 0
@@ -367,6 +374,16 @@ const Store = (() => {
     if (done) stu.elearning[elearnKey] = true; else delete stu.elearning[elearnKey];
     save();
   }
+  // Manually mark a module stage ("classroom" or "dives") complete, for students
+  // whose lectures / dives happened before the switch to this platform and were
+  // never scheduled here. Works like setElearning — never touches the cert flag.
+  function setManualStage(studentId, moduleCode, stage, done) {
+    const stu = studentById(studentId); if (!stu) return; stu.manual = stu.manual || {};
+    const m = stu.manual[moduleCode] = stu.manual[moduleCode] || {};
+    if (done) m[stage] = true; else delete m[stage];
+    if (!Object.keys(m).length) delete stu.manual[moduleCode];
+    save();
+  }
   function addStaffOff(id, start, end) { const st = staffById(id); if (!st) return; st.off = st.off || []; st.off.push({ id: uid("off"), start, end }); save(); }
   function removeStaffOff(id, offId) { const st = staffById(id); if (!st) return; st.off = (st.off || []).filter(o => o.id !== offId); save(); }
   function addStaff(name) { state.staff.push({ id: uid("staff"), name, off: [], canTeach: [] }); save(); }
@@ -392,7 +409,7 @@ const Store = (() => {
     moduleStatus, diveReqStatus, courseProgress, staffOff, staffCanTeach,
     todayISO, isPastOrToday,
     upsertStudent, deleteStudent, addSession, updateSession, deleteSession,
-    setCert, setElearning, addStaffOff, removeStaffOff, addStaff, setStaffCanTeach,
+    setCert, setElearning, setManualStage, addStaffOff, removeStaffOff, addStaff, setStaffCanTeach,
     saveCourse, saveModule, setPassword, exportJSON, importJSON
   };
 })();
