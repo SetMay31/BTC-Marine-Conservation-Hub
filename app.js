@@ -2013,10 +2013,170 @@
   }
 
   /* ========================================================================
+     STUDENT IMPORT — upload the "Balance Payments" CSV, add new students only.
+     (A live auto-sync isn't possible: a static site can't read a private Google
+     Sheet — no auth and cross-origin requests are blocked. So the manager
+     downloads that tab as CSV — File ▸ Download ▸ Comma-separated values — and
+     uploads it here; duplicates are skipped automatically.)
+     ===================================================================== */
+  const IMPORT_COURSE_MAP = {
+    "cc": "CC", "cs": "CS", "rs": "RS", "mc": "MC", "sd": "SD", "cdm": "CDM",
+    "research assistant": "RA", "ra": "RA",
+    "emp": "C_EMP", "adv emp": "C_ADVEMP", "advanced emp": "C_ADVEMP",
+    "tax i": "C_CTAX1", "coral tax i": "C_CTAX1", "tax ii": "C_CTAX2", "coral tax ii": "C_CTAX2",
+    "tax iii": "C_CTAX3", "coral tax iii": "C_CTAX3", "adv tax": "ADVTAX", "advanced coral taxonomy": "ADVTAX",
+    "resto": "C_RESTO", "coral restoration": "C_RESTO", "restoration": "C_RESTO",
+    "ar": "C_AR", "artificial reefs": "C_AR", "giant clams": "C_GIANTCLAM", "giant clam": "C_GIANTCLAM",
+    "disease": "C_DISEA", "coral disease": "C_DISEA", "image j": "C_IMAGEJ", "imagej": "C_IMAGEJ",
+    "nudibranch": "C_NUDI", "nudibranchs": "C_NUDI", "mad": "C_MAD",
+    "sea slugs": "C_SLUG", "sea slug": "C_SLUG", "slugs": "C_SLUG",
+    "marine pollution": "C_MPOL", "coral predators": "C_PRED", "cleaning stations": "C_CLEAN",
+    "citizen science": "C_CITSCI", "sharks": "D_SHARK", "shark": "D_SHARK",
+    "turtles": "D_TURTLE", "turtle": "D_TURTLE", "plastic": "D_PLAST", "plastic pollution": "D_PLAST"
+  };
+  const IMPORT_CERT_MAP = {
+    "aow": "Advanced Open Water", "ow": "Open Water", "dm": "Divemaster",
+    "resc": "Rescue Diver", "rescue": "Rescue Diver", "rescue diver": "Rescue Diver",
+    "inst": "Instructor", "instructor": "Instructor",
+    "non-diver": "None / Non-diver", "non diver": "None / Non-diver", "nondiver": "None / Non-diver", "none": "None / Non-diver"
+  };
+  function parseImportDate(s) {
+    s = (s || "").trim(); if (!s) return "";
+    const m = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);
+    if (!m) return "";
+    let y = Number(m[3]); if (y < 100) y += 2000;
+    return `${y}-${String(Number(m[2])).padStart(2, "0")}-${String(Number(m[1])).padStart(2, "0")}`;
+  }
+  function parseCSV(text) {
+    const rows = []; let row = [], cur = "", inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; } else cur += ch; }
+      else if (ch === '"') inQ = true;
+      else if (ch === ",") { row.push(cur); cur = ""; }
+      else if (ch === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+      else if (ch !== "\r") cur += ch;
+    }
+    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+  function mapImportCourses(str) {
+    const codes = [], unknown = [];
+    (str || "").split(/[,/]+/).map(x => x.trim()).filter(Boolean).forEach(tok => {
+      const code = IMPORT_COURSE_MAP[tok.toLowerCase()];
+      if (code) { if (!codes.includes(code)) codes.push(code); }
+      else unknown.push(tok);
+    });
+    return { codes, unknown };
+  }
+  function parseStudentImport(csvText) {
+    const rows = parseCSV(csvText).filter(r => r.some(c => (c || "").trim()));
+    if (!rows.length) return { error: "That file is empty." };
+    let hi = rows.findIndex(r => r.map(c => c.trim().toLowerCase()).includes("name"));
+    if (hi < 0) return { error: "Couldn't find a header row with a “Name” column." };
+    const header = rows[hi].map(c => c.trim().toLowerCase());
+    const find = pred => header.findIndex(pred);
+    const iName = header.indexOf("name"), iEmail = header.indexOf("email");
+    const iArr = find(h => h.startsWith("arrival")), iStart = find(h => h.startsWith("start"));
+    const iCourse = find(h => h.includes("conservation course")), iCert = find(h => h === "certification");
+    if (iName < 0) return { error: "No “Name” column found." };
+    const norm = s => (s || "").trim().replace(/\s+/g, " ").toLowerCase();   // collapse whitespace
+    const firstLast = s => { const p = norm(s).split(" "); return p.length ? p[0] + "|" + p[p.length - 1] : ""; };
+    const existingEmails = new Set(S.students(true).map(s => (s.email || "").toLowerCase()).filter(Boolean));
+    const existingNames = new Set(S.students(true).map(s => norm(s.name)));
+    const byFirstLast = {};
+    S.students(true).forEach(s => { byFirstLast[firstLast(s.name)] = s.name; });
+    const neu = [], already = [];
+    for (let r = hi + 1; r < rows.length; r++) {
+      const row = rows[r], name = (row[iName] || "").trim();
+      if (!name) continue;
+      const email = iEmail >= 0 ? (row[iEmail] || "").trim() : "";
+      const emailKey = email.toLowerCase();
+      const isDup = (emailKey && existingEmails.has(emailKey)) || existingNames.has(norm(name));
+      if (isDup) { already.push(name); continue; }
+      const cm = mapImportCourses(iCourse >= 0 ? row[iCourse] : "");
+      const certRaw = iCert >= 0 ? (row[iCert] || "").trim() : "";
+      const arrival = parseImportDate(iArr >= 0 ? row[iArr] : "") || parseImportDate(iStart >= 0 ? row[iStart] : "");
+      const dupeOf = byFirstLast[firstLast(name)];   // same first+last as an existing student → likely the same person
+      neu.push({ name, email, arrival, courses: cm.codes, unknownCourses: cm.unknown,
+        cert: IMPORT_CERT_MAP[certRaw.toLowerCase()] || "", certRaw, dupeOf: dupeOf || "" });
+      existingNames.add(norm(name)); if (emailKey) existingEmails.add(emailKey);  // guard in-file dups
+    }
+    return { neu, alreadyCount: already.length };
+  }
+  function importFlagged(n) { return !!n.dupeOf || !n.email || !n.courses.length || n.unknownCourses.length || (n.certRaw && !n.cert); }
+  function importDetail(n) {
+    const parts = [n.email || "no email"];
+    parts.push(n.courses.map(c => (S.courseByCode(c) || {}).name || c).join(" · ") || "no course");
+    if (n.cert) parts.push(n.cert); else if (n.certRaw) parts.push("cert ?: " + n.certRaw);
+    if (n.arrival) parts.push("arr " + fmtDay(n.arrival));
+    if (n.dupeOf) parts.push("possible dup of “" + n.dupeOf + "”");
+    return parts.join("  ·  ");
+  }
+  function importRow(n) {
+    return el("div", { class: "list-line" }, [
+      el("div", {}, [el("strong", { text: n.name }), " ", el("span", { class: "muted small", text: importDetail(n) })]),
+      importFlagged(n) ? el("span", { class: "pill warn", text: "⚠ check" }) : el("span", { class: "pill good", text: "ok" })
+    ]);
+  }
+  function openImportPreview(res) {
+    const neu = res.neu;
+    const toAdd = neu.filter(n => !n.dupeOf);        // hold back likely same-person name matches
+    const heldDupes = neu.length - toAdd.length;
+    const rows = neu.length ? neu.map(importRow)
+      : [el("div", { class: "muted small", text: "No new students — everyone in the file is already in the hub." })];
+    const list = el("div", { style: "max-height:46vh;overflow:auto;margin-top:8px" }, rows);
+    modal({
+      title: `Import preview — ${toAdd.length} to add`, wide: true,
+      body: [
+        el("p", { class: "muted small", text: `${res.alreadyCount} already in the hub (skipped).`
+          + (heldDupes ? ` ${heldDupes} look like an existing student under a slightly different name (⚠ “possible dup”) — held back; add manually if genuinely new.` : "")
+          + ` Flagged ⚠ rows missing an email/course or an unrecognised course/cert are still added (with a note) — edit after.` }),
+        list
+      ],
+      actions: [
+        { label: "Cancel", onClick: closeModal },
+        toAdd.length ? { label: `Add ${toAdd.length} student${toAdd.length !== 1 ? "s" : ""}`, class: "btn-primary", onClick: () => {
+          toAdd.forEach(n => S.upsertStudent({
+            name: n.name, email: n.email, phone: "", nationality: "", dob: "",
+            emergencyName: "", emergencyPhone: "", arrival: n.arrival, departure: "",
+            note: n.unknownCourses.length ? "Imported — unrecognised course(s): " + n.unknownCourses.join(", ") : "",
+            courses: n.courses, certs: {}, elearning: {}, manual: {},
+            compliance: { medical: false, waiver: false, cdPaperwork: false },
+            startLevel: { cert: n.cert, loggedDives: "", priorModules: [] }, archived: false
+          }));
+          closeModal(); render(); toast(`Added ${toAdd.length} student${toAdd.length !== 1 ? "s" : ""}`);
+        }} : null
+      ].filter(Boolean)
+    });
+  }
+  function runStudentImport(csvText) {
+    const res = parseStudentImport(csvText);
+    if (res.error) return toast(res.error);
+    openImportPreview(res);
+  }
+
+  /* ========================================================================
      SETTINGS
      ===================================================================== */
   function renderSettings(root) {
     root.appendChild(el("div", { class: "screen-head" }, el("h2", { text: "Settings" })));
+
+    // --- student import from the payments sheet ---
+    const fileInput = el("input", { type: "file", accept: ".csv,text/csv", style: "display:none",
+      onchange: e => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader();
+        rd.onload = () => { runStudentImport(String(rd.result || "")); fileInput.value = ""; }; rd.readAsText(f); } });
+    const pasteBox = el("textarea", { rows: "3", placeholder: "…or paste the sheet's CSV here", style: "width:100%;margin-top:8px" });
+    root.appendChild(el("div", { class: "card", style: "margin-bottom:14px" }, [
+      el("h3", { text: "Import students from the payments sheet" }),
+      el("p", { class: "muted small", text: "In the “Balance Payments” tab: File ▸ Download ▸ Comma-separated values (.csv), then upload it here. New students are added (Arrival, Name, Email, Conservation Course, Certification); anyone already in the hub is skipped. You'll see a preview before anything is added." }),
+      el("div", { class: "row", style: "gap:8px;flex-wrap:wrap" }, [
+        el("button", { class: "btn btn-primary", onclick: () => fileInput.click() }, "⬆ Upload CSV"),
+        el("button", { class: "btn", onclick: () => { const t = pasteBox.value.trim(); if (!t) return toast("Paste the CSV first, or use Upload CSV"); runStudentImport(t); } }, "Preview from pasted text")
+      ]),
+      fileInput, pasteBox
+    ]));
+
     const up = S.settings().uploaders;
     const names = S.settings().uploaderNames || {};
 
