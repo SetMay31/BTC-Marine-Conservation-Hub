@@ -1504,7 +1504,9 @@
         const done = stu.extrasDone && stu.extrasDone[ex];
         wrap.appendChild(checkbox(ex, done, v => {
           stu.extrasDone = stu.extrasDone || {}; if (v) stu.extrasDone[ex] = true; else delete stu.extrasDone[ex];
-          S.upsertStudent(stu);
+          // Persist and reopen so the profile's working copy stays in sync and a
+          // later "Save" doesn't overwrite this tick (matches the stage dots).
+          S.upsertStudent(stu); reopenStudent(stu.id);
         }));
       });
     }
