@@ -1205,7 +1205,7 @@
     if (UI.studentFilter === "pending") {
       const pf = [["all", "All pending"], ["elearning", "E-learning pending"], ["cert", "Ready to certify"], ["compliance", "Compliance pending"]];
       root.appendChild(el("div", { class: "sched-toolbar", style: "margin-top:-4px" }, pf.map(([k, label]) =>
-        el("button", { class: "btn btn-sm btn-ghost" + ((UI.pendingFilter || "all") === k ? " btn-primary" : ""),
+        el("button", { class: "btn btn-sm " + ((UI.pendingFilter || "all") === k ? "btn-primary" : "btn-ghost"),
           onclick: () => { UI.pendingFilter = k; render(); } }, label))));
     }
 
