@@ -155,6 +155,27 @@ const SEED = {
     ]
   },
 
+  /* --- INSTRUCTOR MODULES --------------------------------------------------
+     Conservation days that sit inside larger non-conservation courses. They are
+     assigned to an instructor only (no named conservation students — just a head
+     count) and scheduled onto the master/staff schedules. Each carries its own
+     inline template (day offset, type, name, start, end, block = shared boat). */
+  instructorModules: [
+    { code: "DMCREACT", name: "DMC React", template: [
+      { day: 0, type: "lecture", name: "Lecture", start: "09:00", end: "10:30" },
+      { day: 0, type: "dive", name: "Dive 1", start: "12:00", end: "17:00", block: 1 },
+      { day: 0, type: "dive", name: "Dive 2", start: "12:00", end: "17:00", block: 1 },
+      { day: 1, type: "lecture", name: "Lecture", start: "09:00", end: "10:30" },
+      { day: 1, type: "dive", name: "Dive 1", start: "12:00", end: "17:00", block: 2 },
+      { day: 1, type: "dive", name: "Dive 2", start: "12:00", end: "17:00", block: 2 }
+    ]},
+    { code: "IDCCONS", name: "IDC Conservation", template: [
+      { day: 0, type: "lecture", name: "Lecture", start: "08:00", end: "09:30" },
+      { day: 0, type: "dive", name: "INSTRUCTOR DIVE", start: "12:00", end: "17:00", block: 1 },
+      { day: 0, type: "dive", name: "Conservation Dive", start: "12:00", end: "17:00", block: 1 }
+    ]}
+  ],
+
   // --- STAFF (flat list) ---------------------------------------------------
   staff: ["Cass", "Seth", "Maisie", "Kelly", "Irene", "C.J.", "Tereza", "Michael"],
 

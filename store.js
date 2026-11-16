@@ -71,6 +71,7 @@ const Store = (() => {
         templates: JSON.parse(JSON.stringify(S.templates))
       },
       modules, diveComponents, courses, staff,
+      instructorModules: JSON.parse(JSON.stringify(S.instructorModules || [])),
       students: [], sessions: []
     };
   }
@@ -101,6 +102,7 @@ const Store = (() => {
     state.meta.version = window.SEED.version;
     state.settings = state.settings || def.settings;
     state.diveComponents = state.diveComponents || def.diveComponents;
+    state.instructorModules = state.instructorModules || def.instructorModules;
     state.staff = state.staff || [];
     state.staff.forEach(s => { if (!s.canTeach) s.canTeach = []; });
     state.students = state.students || [];
@@ -191,6 +193,8 @@ const Store = (() => {
 
   const moduleByCode = c => state.modules.find(m => m.code === c);
   const diveCompByCode = c => state.diveComponents.find(d => d.code === c);
+  const instructorModules = () => state.instructorModules || [];
+  const instrModuleByCode = c => (state.instructorModules || []).find(m => m.code === c);
   const courseByCode = c => state.courses.find(x => x.code === c);
   const staffById = id => state.staff.find(s => s.id === id);
   const studentById = id => state.students.find(s => s.id === id);
@@ -458,6 +462,7 @@ const Store = (() => {
   return {
     uid, get, save, subscribe, undo, canUndo, onUI, syncInfo,
     modules, diveComponents, courses, staff, students, sessions, settings, template,
+    instructorModules, instrModuleByCode,
     moduleByCode, diveCompByCode, courseByCode, staffById, studentById,
     programChain, courseModuleCodes, courseDiveComps, courseItemsOrdered, courseExtras,
     studentModuleCodes, studentDiveReqs, studentExtras,

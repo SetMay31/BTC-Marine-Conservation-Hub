@@ -295,6 +295,7 @@
       el("div", { class: "row" }, [
         el("button", { class: "btn", onclick: openDaySheet }, "🖨 Day sheet"),
         el("button", { class: "btn btn-primary", onclick: openScheduleModule }, "+ Schedule module"),
+        el("button", { class: "btn", onclick: () => openInstructorModule() }, "+ Instructor module"),
         el("button", { class: "btn", onclick: () => openSessionModal(null) }, "+ Session / survey")
       ])
     ]));
@@ -504,6 +505,7 @@
       el("div", { class: "s-title" }, sessionTitle(se)),
       el("div", { class: "s-meta" }, (se.staff || "— no staff") + (se.diveSite ? " · " + se.diveSite : "")),
       studs.length ? el("div", { class: "s-meta", text: studs.join(", ") }) : null,
+      (se.kind === "instructor" && se.headcount != null) ? el("div", { class: "s-meta", text: se.headcount + " student" + (se.headcount === 1 ? "" : "s") }) : null,
       offWarn ? el("div", { class: "s-warn", text: "⚠ staff OFF" }) : null,
       (se.staff && se.moduleCode && !S.staffCanTeach(se.staff, se.moduleCode)) ? el("div", { class: "s-warn", text: "⚠ not signed off to teach" }) : null,
       (!se.staff && se.kind !== "adhoc") ? el("div", { class: "s-warn", text: "⚠ no staff" }) : null
@@ -703,6 +705,7 @@
   /* ---------- session title helpers ---------- */
   function sessionTitle(se) {
     if (se.kind === "survey") { const c = S.courseByCode(se.courseCode); return c ? c.name : "Survey"; }
+    if (se.kind === "instructor") { const m = S.instrModuleByCode(se.instrCode); return `${m ? m.name : se.instrCode} — ${se.name}`; }
     if (se.kind === "adhoc") return (se.adhocLabel || "Session") + (se.diveIndex ? ` — Dive ${se.diveIndex}` : "");
     const mod = S.moduleByCode(se.moduleCode);
     const base = mod ? mod.name : (se.moduleCode || "Session");
@@ -711,6 +714,7 @@
   }
   function shortTitle(se) {
     if (se.kind === "survey") return (S.courseByCode(se.courseCode) || {}).name || "Survey";
+    if (se.kind === "instructor") { const m = S.instrModuleByCode(se.instrCode); return `${m ? m.name : se.instrCode}: ${se.name}${se.headcount != null ? " (" + se.headcount + ")" : ""}`; }
     if (se.kind === "adhoc") return (se.adhocLabel || "Session") + (se.diveIndex ? ` D${se.diveIndex}` : "");
     const mod = S.moduleByCode(se.moduleCode);
     const code = mod ? mod.code : se.moduleCode;
@@ -808,9 +812,10 @@
         el("p", { class: "muted small", text: "What would you like to schedule on this day?" }),
         el("div", { class: "row", style: "gap:10px;flex-wrap:wrap;margin-top:8px" }, [
           el("button", { class: "btn btn-primary", onclick: () => { closeModal(); openScheduleModule({ date: dISO }); } }, "+ Schedule module"),
+          el("button", { class: "btn", onclick: () => { closeModal(); openInstructorModule({ date: dISO }); } }, "+ Instructor module"),
           el("button", { class: "btn", onclick: () => { closeModal(); openSessionModal(null, dISO); } }, "+ Session / survey")
         ]),
-        el("p", { class: "muted small", style: "margin-top:10px", text: "A module lays out its lecture(s) and dives per template; a session is a single lecture, dive, survey or ad-hoc outing." })
+        el("p", { class: "muted small", style: "margin-top:10px", text: "A module lays out its lecture(s) and dives per template; an instructor module is an instructor-only conservation day with a head count; a session is a single lecture, dive, survey or ad-hoc outing." })
       ],
       actions: [{ label: "Cancel", onClick: closeModal }]
     });
@@ -940,10 +945,112 @@
   }
 
   /* ========================================================================
+     INSTRUCTOR MODULES — staff-only conservation days inside larger courses.
+     Assigned to one instructor with a head count + dive site (no named students).
+     ===================================================================== */
+  function openInstructorModule(preset) {
+    let instrCode = (preset && preset.instrCode) || "";
+    let date = (preset && preset.date) || todayISO();
+    let staffName = "", headcount = "", site = "";
+
+    const modSel = el("select", { onchange: e => { instrCode = e.target.value; checkClash(); } },
+      [el("option", { value: "" }, "— choose a module —"),
+       ...S.instructorModules().map(m => el("option", { value: m.code, selected: instrCode === m.code ? "selected" : null }, m.name))]);
+
+    function buildCandidates(groupId) {
+      const mod = S.instrModuleByCode(instrCode); if (!mod) return [];
+      return (mod.template || []).map(r => ({
+        kind: "instructor", instrCode, name: r.name, groupId,
+        staff: staffName, headcount: headcount === "" ? null : Number(headcount),
+        diveSite: r.type === "dive" ? site : "",
+        studentIds: [],
+        date: addDays(date, r.day), start: r.start, end: r.end,
+        section: r.type === "dive" ? "dive" : "lecture",
+        medium: r.type === "dive" ? "dive" : "land", block: r.block || null
+      }));
+    }
+    const clashEl = el("div");
+    function checkClash() {
+      clashEl.innerHTML = "";
+      if (!instrCode || !staffName) return;
+      for (const cand of buildCandidates("tmp")) {
+        const cs = conflictsFor(cand);
+        if (cs.length) { clashEl.appendChild(el("div", { class: "warn-banner", text: "⚠ Clash: " + conflictMsg(cs) })); return; }
+      }
+    }
+    const body = [
+      field("Module", modSel),
+      field("Instructor", staffSelect(v => { staffName = v; checkClash(); })),
+      el("div", { class: "field-row" }, [
+        field("Number of students", el("input", { type: "number", min: "0", placeholder: "e.g. 4", value: headcount, oninput: e => headcount = e.target.value })),
+        field("Start date", el("input", { type: "date", value: date, oninput: e => { date = e.target.value; checkClash(); } }))
+      ]),
+      field("Dive site", el("input", { placeholder: "e.g. Aow Leuk", value: site, oninput: e => site = e.target.value })),
+      clashEl,
+      el("p", { class: "muted small", text: "Assigned to the instructor only — no named conservation students, just a head count. Lays out the module's lecture(s) and dives; every session is movable afterwards." })
+    ];
+    modal({
+      title: "Schedule instructor module", wide: true, body,
+      actions: [
+        { label: "Cancel", onClick: closeModal },
+        { label: "Create sessions", class: "btn-primary", onClick: () => {
+          if (!instrCode) return toast("Choose a module");
+          if (!staffName) return toast("Assign an instructor");
+          const mod = S.instrModuleByCode(instrCode);
+          const cands = buildCandidates(S.uid("grp"));
+          for (const c of cands) { const cs = conflictsFor(c); if (cs.length) return toast("Can't schedule — " + conflictMsg(cs)); }
+          cands.forEach(c => S.addSession(c));
+          const lastDay = Math.max(0, ...cands.map(c => daysBetween(date, c.date)));
+          closeModal(); UI.schedView = "master"; UI.weekStart = mondayOf(date); render();
+          toast(`Scheduled ${mod.name} (${lastDay + 1} day${lastDay ? "s" : ""})`);
+        }}
+      ]
+    });
+    checkClash();
+  }
+
+  function openInstructorEdit(se) {
+    const s = { ...se };
+    const mod = S.instrModuleByCode(se.instrCode);
+    const group = S.sessions().filter(x => x.groupId === se.groupId && x.kind === "instructor");
+    const numVal = v => v === "" ? null : Number(v);
+    const body = [
+      el("div", { class: "warn-banner", style: "background:var(--accent-soft);color:var(--ink);border-color:var(--accent-2)",
+        text: `${mod ? mod.name : se.instrCode} — ${se.name}` }),
+      field("Date", el("input", { type: "date", value: s.date, oninput: e => s.date = e.target.value })),
+      el("div", { class: "field-row" }, [
+        field("Start", el("input", { type: "time", value: s.start, oninput: e => s.start = e.target.value })),
+        field("End", el("input", { type: "time", value: s.end, oninput: e => s.end = e.target.value }))
+      ]),
+      field("Instructor", staffSelect(v => s.staff = v, s.staff)),
+      el("div", { class: "field-row" }, [
+        field("Number of students", el("input", { type: "number", min: "0", value: s.headcount == null ? "" : s.headcount, oninput: e => s.headcount = numVal(e.target.value) })),
+        field("Dive site", el("input", { value: s.diveSite || "", oninput: e => s.diveSite = e.target.value }))
+      ]),
+      el("p", { class: "muted small", text: "“Save” changes this session only. “Apply to whole module” sets the instructor, head count and site across all its days." })
+    ];
+    modal({
+      title: "Edit instructor module", wide: true, body,
+      actions: [
+        { label: "Cancel", onClick: closeModal },
+        { label: "Delete whole module", class: "btn-danger", onClick: () =>
+          confirmDialog(`Delete all ${group.length} session${group.length !== 1 ? "s" : ""} of ${mod ? mod.name : se.instrCode}?`, () => { group.forEach(x => S.deleteSession(x.id)); render(); }) },
+        { label: "Apply to whole module", onClick: () => {
+          group.forEach(x => S.updateSession(x.id, { staff: s.staff, headcount: s.headcount, diveSite: x.section === "dive" ? s.diveSite : x.diveSite }));
+          closeModal(); render(); toast("Module updated"); } },
+        { label: "Save", class: "btn-primary", onClick: () => {
+          S.updateSession(se.id, { date: s.date, start: s.start, end: s.end, staff: s.staff, headcount: s.headcount, diveSite: s.diveSite });
+          closeModal(); render(); } }
+      ]
+    });
+  }
+
+  /* ========================================================================
      SESSION edit / add (incl. surveys & ad-hoc)
      ===================================================================== */
   function openSessionModal(id, presetDate, preset) {
     const existing = id ? S.sessions().find(s => s.id === id) : null;
+    if (existing && existing.kind === "instructor") { openInstructorEdit(existing); return; }
     const se = existing ? { ...existing } : Object.assign({
       id: null, date: presetDate || todayISO(), start: "07:00", end: "11:00",
       kind: "adhoc", medium: "dive", staff: "", assist: "", shadow: "", surveyLead: "",
