@@ -80,6 +80,7 @@
     studentView: "list",       // list | week | month (student schedule)
     studentMonth: null,        // month view's month (null = current)
     studentFilter: "current",  // current | all | pending | certified
+    pendingFilter: "all",      // all | elearning | cert | compliance (within Pending)
     dashDay: null              // dashboard outings day (null = today)
   };
 
@@ -1176,6 +1177,16 @@
     return true;
   }
   function isCertified(s) { const p = S.courseProgress(s); return p.total > 0 && p.certified === p.total; }
+  // Pending sub-filters (used under the "Pending" toggle).
+  function hasElearningPending(s) {
+    return S.studentModuleCodes(s).some(mc => { const st = S.moduleStatus(s, mc); return st && st.elearning === false; });
+  }
+  // A module is "ready to certify" when E, C and D are all complete but the cert
+  // hasn't been issued yet.
+  function hasCertReady(s) {
+    return S.studentModuleCodes(s).some(mc => { const st = S.moduleStatus(s, mc); return st && st.ready && !st.cert; });
+  }
+  function hasCompliancePending(s) { return !!complianceMissing(s); }
 
   function renderStudents(root) {
     root.appendChild(el("div", { class: "spread screen-head" }, [
@@ -1190,11 +1201,27 @@
       el("button", { class: "btn btn-sm" + (UI.studentFilter === k ? " btn-primary" : ""),
         onclick: () => { UI.studentFilter = k; render(); } }, label))));
 
+    // sub-filters, only while "Pending" is active
+    if (UI.studentFilter === "pending") {
+      const pf = [["all", "All pending"], ["elearning", "E-learning pending"], ["cert", "Ready to certify"], ["compliance", "Compliance pending"]];
+      root.appendChild(el("div", { class: "sched-toolbar", style: "margin-top:-4px" }, pf.map(([k, label]) =>
+        el("button", { class: "btn btn-sm btn-ghost" + ((UI.pendingFilter || "all") === k ? " btn-primary" : ""),
+          onclick: () => { UI.pendingFilter = k; render(); } }, label))));
+    }
+
     const base = UI.studentFilter === "all" ? S.students(true) : S.students();
     const list = base.filter(s => {
       if (UI.studentFilter === "current") return isCurrent(s);
       if (UI.studentFilter === "certified") return isCertified(s);
-      if (UI.studentFilter === "pending") return !isCertified(s);
+      if (UI.studentFilter === "pending") {
+        // only the active roster has pending work worth chasing (departed students excluded)
+        if (s.departed || isCertified(s)) return false;
+        const pf = UI.pendingFilter || "all";
+        if (pf === "elearning") return hasElearningPending(s);
+        if (pf === "cert") return hasCertReady(s);
+        if (pf === "compliance") return hasCompliancePending(s);
+        return true;  // all pending
+      }
       return true;
     });
     if (!list.length) { root.appendChild(el("div", { class: "empty", text: "No students in this view." })); return; }
