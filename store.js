@@ -409,8 +409,44 @@ const Store = (() => {
   function addStaff(name) { state.staff.push({ id: uid("staff"), name, off: [], canTeach: [] }); save(); }
   function setStaffCanTeach(id, codes) { const st = staffById(id); if (!st) return; st.canTeach = codes; save(); }
 
-  function saveCourse(c) { const i = state.courses.findIndex(x => x.code === c.code); if (i >= 0) state.courses[i] = c; else state.courses.push(c); save(); }
-  function saveModule(m) { const i = state.modules.findIndex(x => x.code === m.code); if (i >= 0) state.modules[i] = m; else state.modules.push(m); save(); }
+  // When a module's code is renamed, carry the change to everything that points
+  // at it so nothing is orphaned.
+  function renameModuleRefs(oldC, newC) {
+    if (!oldC || oldC === newC) return;
+    state.sessions.forEach(s => { if (s.moduleCode === oldC) s.moduleCode = newC; });
+    state.courses.forEach(c => { if (Array.isArray(c.moduleCodes)) c.moduleCodes = c.moduleCodes.map(m => m === oldC ? newC : m); });
+    state.students.forEach(s => {
+      if (s.certs && s.certs[oldC]) { s.certs[newC] = s.certs[oldC]; delete s.certs[oldC]; }
+      if (s.manual && s.manual[oldC]) { s.manual[newC] = s.manual[oldC]; delete s.manual[oldC]; }
+      if (s.startLevel && Array.isArray(s.startLevel.priorModules)) s.startLevel.priorModules = s.startLevel.priorModules.map(m => m === oldC ? newC : m);
+    });
+  }
+  // Likewise for a course/programme code rename.
+  function renameCourseRefs(oldC, newC) {
+    if (!oldC || oldC === newC) return;
+    state.students.forEach(s => { if (Array.isArray(s.courses)) s.courses = s.courses.map(c => c === oldC ? newC : c); });
+    state.courses.forEach(c => {
+      if (c.stacksOn === oldC) c.stacksOn = newC;
+      if (Array.isArray(c.packOf)) c.packOf = c.packOf.map(x => x === oldC ? newC : x);
+    });
+    state.sessions.forEach(s => { if (s.courseCode === oldC) s.courseCode = newC; });
+  }
+  // origCode identifies the record being edited, so changing the code updates the
+  // existing entry (and its references) instead of creating a duplicate.
+  function saveCourse(c, origCode) {
+    const key = origCode || c.code;
+    const i = state.courses.findIndex(x => x.code === key);
+    if (i >= 0) { if (key !== c.code) renameCourseRefs(key, c.code); state.courses[i] = c; }
+    else state.courses.push(c);
+    save();
+  }
+  function saveModule(m, origCode) {
+    const key = origCode || m.code;
+    const i = state.modules.findIndex(x => x.code === key);
+    if (i >= 0) { if (key !== m.code) renameModuleRefs(key, m.code); state.modules[i] = m; }
+    else state.modules.push(m);
+    save();
+  }
   function setPassword(p) { state.settings.password = p; save(); }
 
   function exportJSON() { return JSON.stringify(state, null, 2); }

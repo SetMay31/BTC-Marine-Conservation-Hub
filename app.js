@@ -1833,7 +1833,7 @@
       { label: "Save", class: "btn-primary", onClick: () => {
         if (!m.code || !m.name) return toast("Code and name required");
         m.elearn = hasEl ? (m.elearn || m.code) : null;
-        S.saveModule(m); closeModal(); render(); }}
+        S.saveModule(m, existing ? existing.code : null); closeModal(); render(); }}
     ]});
   }
 
@@ -1872,7 +1872,7 @@
       { label: "Cancel", onClick: closeModal },
       { label: "Save", class: "btn-primary", onClick: () => {
         if (!c.code || !c.name) return toast("Code and name required");
-        S.saveCourse(c); closeModal(); render(); }}
+        S.saveCourse(c, existing ? existing.code : null); closeModal(); render(); }}
     ]});
   }
 
