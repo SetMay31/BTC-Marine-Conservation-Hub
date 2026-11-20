@@ -194,6 +194,14 @@ input, select, textarea {
   background: var(--surface); color: var(--ink); font-family: inherit; font-size: .9rem;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent-2); }
+/* custom dropdown chevron so the label and arrow sit at equal insets from the edges */
+select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237f949b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+select::-ms-expand { display: none; }
 .field { margin-bottom: 12px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .checkbox-row { display: flex; align-items: center; gap: 8px; }
