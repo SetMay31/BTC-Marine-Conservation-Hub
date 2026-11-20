@@ -233,7 +233,7 @@
     // Day-navigable outings card (defaults to today)
     const dashDay = UI.dashDay || today;
     const dayOutings = S.sessions().filter(s => s.date === dashDay).sort(byDateTime);
-    grid.appendChild(el("div", { class: "card" }, [
+    grid.appendChild(el("div", { class: "card dash-card" }, [
       el("div", { class: "spread" }, [
         el("h3", { text: "Outings", style: "margin:0" }),
         el("div", { class: "row", style: "gap:4px" }, [
@@ -243,7 +243,7 @@
           dashDay !== today ? el("button", { class: "btn btn-sm btn-ghost", title: "Back to today", onclick: () => { UI.dashDay = today; render(); }, text: "Today" }) : null
         ])
       ]),
-      ...(dayOutings.length
+      el("div", { class: "dash-card-list" }, dayOutings.length
         ? dayOutings.map(se => line(`${se.start || ""} ${sessionTitle(se)}`, se.staff || "—"))
         : [emptyLine("Nothing scheduled")])
     ]));
@@ -272,7 +272,7 @@
     root.appendChild(grid);
   }
   const stat = (n, l) => el("div", { class: "stat" }, [el("div", { class: "n", text: String(n) }), el("div", { class: "l", text: l })]);
-  const dashCard = (title, lines) => el("div", { class: "card" }, [el("h3", { text: title }), ...lines]);
+  const dashCard = (title, lines) => el("div", { class: "card dash-card" }, [el("h3", { text: title }), el("div", { class: "dash-card-list" }, lines)]);
   const line = (a, b) => el("div", { class: "list-line" }, [el("span", { text: a }), el("span", { class: "muted small", text: b })]);
   // Like line(), but the student's name is a clickable link that opens their card.
   const studentLine = (stu, b) => el("div", { class: "list-line" }, [
@@ -503,7 +503,7 @@
     }, [
       el("div", { class: "s-time" }, `${se.start || ""}${se.end ? "–" + se.end : ""}`),
       el("div", { class: "s-title" }, sessionTitle(se)),
-      el("div", { class: "s-meta" }, (se.staff || "— no staff") + (se.diveSite ? " · " + se.diveSite : "")),
+      el("div", { class: "s-meta" }, (se.staff || (se.adhocType === "SELFSTUDY" ? "Self-led" : "— no staff")) + (se.diveSite ? " · " + se.diveSite : "")),
       studs.length ? el("div", { class: "s-meta", text: studs.join(", ") }) : null,
       (se.kind === "instructor" && se.headcount != null) ? el("div", { class: "s-meta", text: se.headcount + " student" + (se.headcount === 1 ? "" : "s") }) : null,
       offWarn ? el("div", { class: "s-warn", text: "⚠ staff OFF" }) : null,
@@ -1701,16 +1701,16 @@
   // Self-Study block — Independent Study in the same style as an Independent
   // Project block, available to any student (not tied to a course requirement).
   function openSelfStudyBlock(stu) {
-    let date = todayISO(), start = "09:00", hours = 1, staff = "";
+    let date = todayISO(), start = "09:00", hours = 1;
     const hoursSel = el("select", { onchange: e => hours = Number(e.target.value) },
       [1, 2, 3, 4, 5, 6].map(h => el("option", { value: h, selected: hours === h ? "selected" : null }, h + (h === 1 ? " hour" : " hours"))));
     const body = [
+      el("p", { class: "muted small", text: "Self-led — no staff needed." }),
       field("Date", el("input", { type: "date", value: date, oninput: e => date = e.target.value })),
       el("div", { class: "field-row" }, [
         field("Start", el("input", { type: "time", value: start, oninput: e => start = e.target.value })),
         field("Duration", hoursSel)
-      ]),
-      field("Lead staff (optional)", staffSelect(v => staff = v))
+      ])
     ];
     modal({
       title: "Add Self-Study block — " + stu.name,
@@ -1721,7 +1721,7 @@
           S.addSession({
             id: null, kind: "adhoc", adhocType: "SELFSTUDY", adhocLabel: "Self-Study",
             studentIds: [stu.id], date, start, end: addMinutesHHMM(start, hours * 60),
-            section: "study", medium: "study", name: "Self-Study", staff, groupId: S.uid("grp")
+            section: "study", medium: "study", name: "Self-Study", staff: "", groupId: S.uid("grp")
           });
           reopenStudent(stu.id); toast("Self-Study block added");
         }}
@@ -1764,7 +1764,7 @@
       // columns = modules an enrolled student needs OR has a certification for
       const usedModules = [...new Set(studs.flatMap(s => [...S.studentModuleCodes(s), ...Object.keys(s.certs || {})]))];
       const cols = S.modules().filter(m => usedModules.includes(m.code));
-      const wrap = el("div", { class: "table-wrap" });
+      const wrap = el("div", { class: "table-wrap cert-wrap" });
       const tbl = el("table", { class: "cert-matrix" });
       tbl.appendChild(el("thead", {}, el("tr", {}, [th("Student"), ...cols.map(m => th(m.code))])));
       const tb = el("tbody");

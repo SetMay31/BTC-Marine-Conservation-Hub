@@ -224,6 +224,8 @@ tbody tr:hover { background: var(--surface-2); }
 td.center, th.center { text-align: center; }
 
 /* certifications matrix: freeze the student column */
+.cert-wrap { max-height: calc(100vh - 230px); overflow: auto; }
+.cert-matrix thead th { position: sticky; top: 0; background: var(--surface-2); z-index: 4; }
 .cert-matrix td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 3; box-shadow: 1px 0 0 var(--line); font-weight: 600; }
 .cert-matrix th:first-child { position: sticky; left: 0; top: 0; background: var(--surface-2); z-index: 5; box-shadow: 1px 0 0 var(--line); }
 .cert-matrix tbody tr:hover td:first-child { background: var(--surface-2); }
@@ -241,7 +243,9 @@ td.center, th.center { text-align: center; }
 }
 .stat .n { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
 .stat .l { font-size: .78rem; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .03em; }
-.dash-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); }
+.dash-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); align-items: start; }
+.dash-card { display: flex; flex-direction: column; }
+.dash-card-list { margin-top: 4px; max-height: 300px; overflow-y: auto; }
 .list-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
 .list-line:last-child { border-bottom: 0; }
 .list-line > span:last-child { text-align: right; flex-shrink: 0; max-width: 60%; }
