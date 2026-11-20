@@ -73,8 +73,10 @@
     screen: "dashboard",
     weekStart: mondayOf(todayISO()),
     schedView: "master",       // master | staff | student
-    staffView: "overview",     // overview | roster
+    staffView: "overview",     // overview | roster | monthly
     staffRosterDay: todayISO(),
+    staffMonthlyId: null,      // selected staff for the monthly view
+    staffMonth: null,          // monthly view's month (null = current)
     schedStudentId: null,
     certView: "grid",          // grid | cards
     studentView: "list",       // list | week | month (student schedule)
@@ -528,10 +530,13 @@
       el("button", { class: "btn btn-sm" + (UI.staffView === "overview" ? " btn-primary" : ""),
         onclick: () => { UI.staffView = "overview"; render(); } }, "Week overview"),
       el("button", { class: "btn btn-sm" + (UI.staffView === "roster" ? " btn-primary" : ""),
-        onclick: () => { UI.staffView = "roster"; render(); } }, "Day roster")
+        onclick: () => { UI.staffView = "roster"; render(); } }, "Day roster"),
+      el("button", { class: "btn btn-sm" + (UI.staffView === "monthly" ? " btn-primary" : ""),
+        onclick: () => { UI.staffView = "monthly"; render(); } }, "Monthly (by staff)")
     ]);
     root.appendChild(bar);
 
+    if (UI.staffView === "monthly") { renderStaffMonthly(root); return; }
     if (UI.staffView === "overview") {
       const start = UI.weekStart;
       root.appendChild(weekNav(render, `${fmtDay(start)} – ${fmtDay(addDays(start, 6))}`));
@@ -585,6 +590,67 @@
       });
       root.appendChild(el("div", { class: "staff-grid" }, tbl));
     }
+  }
+
+  const fmtDow = dISO => { const d = parseISO(dISO); return `${DOW[(d.getDay() + 6) % 7]} ${d.getDate()}`; };
+  // "John Doe (AOW - Conservation Specialist)"
+  function studentCertCourse(s) {
+    const extra = [certAbbrev(s.startLevel && s.startLevel.cert), courseSummaryText(s)].filter(Boolean).join(" - ");
+    return s.name + (extra ? ` (${extra})` : "");
+  }
+  const sessionStudentList = se => (se.studentIds || []).map(id => { const s = S.studentById(id); return s ? studentCertCourse(s) : null; }).filter(Boolean).join(", ");
+
+  // Monthly list for one staff member: a day-by-day diary of what they teach.
+  function renderStaffMonthly(root) {
+    const staff = S.staff();
+    if (!staff.length) { root.appendChild(el("div", { class: "empty", text: "No staff yet." })); return; }
+    if (!UI.staffMonthlyId || !staff.some(s => s.id === UI.staffMonthlyId)) UI.staffMonthlyId = staff[0].id;
+    const selStaff = staff.find(s => s.id === UI.staffMonthlyId);
+    const month = UI.staffMonth || monthStartOf(todayISO());
+    const d0 = parseISO(month);
+
+    root.appendChild(el("div", { class: "sched-toolbar", style: "flex-wrap:wrap;gap:8px;align-items:center" }, [
+      el("label", { text: "Staff", style: "font-weight:600" }),
+      el("select", { onchange: e => { UI.staffMonthlyId = e.target.value; render(); } },
+        staff.map(st => el("option", { value: st.id, selected: st.id === UI.staffMonthlyId ? "selected" : null }, st.name))),
+      el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = addMonths(month, -1); render(); } }, "‹ Prev month"),
+      el("input", { type: "month", value: month.slice(0, 7), onchange: e => { if (e.target.value) { UI.staffMonth = e.target.value + "-01"; render(); } } }),
+      el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = addMonths(month, 1); render(); } }, "Next month ›"),
+      el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = monthStartOf(todayISO()); render(); } }, "This month"),
+      el("strong", { text: `${MONTHS_FULL[d0.getMonth()]} ${d0.getFullYear()}` })
+    ]));
+
+    const name = selStaff.name;
+    const wrap = el("div", { class: "table-wrap staff-monthly-wrap" });
+    const tbl = el("table", { class: "staff-monthly" }, [el("thead", {}, el("tr", {}, [th("Date"), th("Modules"), th("Assist / Shadow"), th("#"), th("Students")]))]);
+    const tb = el("tbody");
+    const daysInMonth = new Date(d0.getFullYear(), d0.getMonth() + 1, 0).getDate();
+    let todayRow = null;
+    const perSess = (sess, fn, empty) => sess.length ? sess.map(fn) : [el("span", { class: "muted small", text: empty || "" })];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dISO = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const sess = S.sessions().filter(s => s.staff === name && s.date === dISO).sort(byDateTime);
+      const off = S.staffOff(selStaff.id, dISO);
+      const isToday = dISO === todayISO();
+      const tr = el("tr", { class: (isToday ? "today-row " : "") + (sess.length ? "" : "empty-day") }, [
+        el("td", { text: fmtDow(dISO), style: "white-space:nowrap" }),
+        el("td", {}, sess.length
+          ? sess.map(se => el("div", { class: `mini-sess m-${se.medium || "dive"}`, style: `background:var(--${se.medium || "dive"}-soft);cursor:pointer`, onclick: () => openSessionModal(se.id), text: `${se.start || ""} ${shortTitle(se)}` }))
+          : [el("span", { class: "muted small", text: off ? "OFF" : "—" })]),
+        el("td", {}, perSess(sess, se => el("div", { class: "small", style: "margin-bottom:6px",
+          text: [se.assist ? "Assist: " + se.assist : null, se.shadow ? "Shadow: " + se.shadow : null].filter(Boolean).join(" · ") || "—" }))),
+        el("td", {}, perSess(sess, se => el("div", { class: "small", style: "margin-bottom:6px;text-align:center;font-weight:600", text: String((se.studentIds || []).length) }))),
+        el("td", {}, perSess(sess, se => el("div", { class: "small", style: "margin-bottom:6px", text: sessionStudentList(se) || "—" })))
+      ]);
+      if (isToday) todayRow = tr;
+      tb.appendChild(tr);
+    }
+    tbl.appendChild(tb); wrap.appendChild(tbl); root.appendChild(wrap);
+    root.appendChild(el("p", { class: "muted small", style: "margin-top:8px", text: "Scroll within the table to move through the month (today is highlighted); use the controls above to change month or staff member." }));
+    if (todayRow) requestAnimationFrame(() => {
+      const wr = wrap.getBoundingClientRect(), r = todayRow.getBoundingClientRect();
+      wrap.scrollTop += (r.top - wr.top) - wrap.clientHeight / 2 + r.height / 2;
+    });
   }
 
   // Generic searchable single-select combobox. `items` should already be sorted;
