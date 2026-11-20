@@ -611,14 +611,14 @@
 
     root.appendChild(el("div", { class: "sched-toolbar", style: "flex-wrap:wrap;gap:8px;align-items:center" }, [
       el("label", { text: "Staff", style: "font-weight:600" }),
-      el("select", { style: "width:auto;min-width:130px", onchange: e => { UI.staffMonthlyId = e.target.value; render(); } },
+      el("select", { style: "width:170px", onchange: e => { UI.staffMonthlyId = e.target.value; render(); } },
         staff.map(st => el("option", { value: st.id, selected: st.id === UI.staffMonthlyId ? "selected" : null }, st.name))),
       el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = addMonths(month, -1); render(); } }, "‹ Prev month"),
-      el("input", { type: "month", style: "width:auto", value: month.slice(0, 7), onchange: e => { if (e.target.value) { UI.staffMonth = e.target.value + "-01"; render(); } } }),
+      el("input", { type: "month", style: "width:170px", value: month.slice(0, 7), onchange: e => { if (e.target.value) { UI.staffMonth = e.target.value + "-01"; render(); } } }),
       el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = addMonths(month, 1); render(); } }, "Next month ›"),
-      el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = monthStartOf(todayISO()); render(); } }, "This month"),
-      el("strong", { text: `${MONTHS_FULL[d0.getMonth()]} ${d0.getFullYear()}` })
+      el("button", { class: "btn btn-sm", onclick: () => { UI.staffMonth = monthStartOf(todayISO()); render(); } }, "This month")
     ]));
+    root.appendChild(el("h3", { text: `${MONTHS_FULL[d0.getMonth()]} ${d0.getFullYear()}`, style: "margin:10px 0 6px" }));
 
     const name = selStaff.name;
     const wrap = el("div", { class: "table-wrap staff-monthly-wrap" });
