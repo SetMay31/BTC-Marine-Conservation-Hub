@@ -222,6 +222,9 @@ th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--lin
 th { background: var(--surface-2); font-weight: 600; color: var(--ink-muted); position: sticky; top: 0; }
 tbody tr:hover { background: var(--surface-2); }
 td.center, th.center { text-align: center; }
+/* day sheet: wrap long student lists so every name + cert stays visible */
+.day-sheet th, .day-sheet td { white-space: normal; vertical-align: top; }
+.day-sheet td:nth-child(4) { min-width: 220px; }
 
 /* certifications matrix: freeze the student column */
 .cert-wrap { max-height: calc(100vh - 230px); overflow: auto; }

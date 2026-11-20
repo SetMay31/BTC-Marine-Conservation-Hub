@@ -334,7 +334,7 @@
       preview.innerHTML = "";
       const sess = daySessions(d);
       if (!sess.length) { preview.appendChild(el("p", { class: "muted small", text: "Nothing scheduled this day." })); return; }
-      const tbl = el("table", {}, [el("thead", {}, el("tr", {}, [th("Time"), th("Session"), th("Staff"), th("Students"), th("Dive site")]))]);
+      const tbl = el("table", { class: "day-sheet" }, [el("thead", {}, el("tr", {}, [th("Time"), th("Session"), th("Staff"), th("Students"), th("Dive site")]))]);
       const tb = el("tbody");
       sess.forEach(se => tb.appendChild(el("tr", {}, [
         td(`${se.start || ""}${se.end ? "–" + se.end : ""}`), tdMedium(se), td(se.staff || "—"),
@@ -373,7 +373,7 @@
     const sheet = el("div", { class: "print-sheet", html:
       `<h2 style="margin:0 0 4px">BTC Marine Conservation — Day Schedule</h2>
        <div style="margin-bottom:12px">${esc(fmtLong(d))}</div>
-       <table><thead><tr><th>Time</th><th>Session</th><th>Staff</th><th>Students</th><th>Dive site</th></tr></thead>
+       <table class="day-sheet"><thead><tr><th>Time</th><th>Session</th><th>Staff</th><th>Students</th><th>Dive site</th></tr></thead>
        <tbody>${rowsHtml}</tbody></table>` });
     document.body.appendChild(sheet);
     const cleanup = () => { sheet.remove(); window.removeEventListener("afterprint", cleanup); };
