@@ -33,6 +33,8 @@
   --survey-soft: #e6ddf2;
   --adhoc: #c9975c;        /* sand/amber for flexible ad-hoc */
   --adhoc-soft: #f2e7d4;
+  --study: #c77d9b;        /* rose — Independent Study (project + self-study) */
+  --study-soft: #f3e1ea;
 
   /* Functional */
   --good: #1a9e7f;
@@ -67,6 +69,7 @@
     --dive-soft: #1a333b;
     --survey-soft: #2c2740;
     --adhoc-soft: #3a3121;
+    --study-soft: #3a2733;
     --shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
 }
@@ -87,6 +90,7 @@
   --dive-soft: #1a333b;
   --survey-soft: #2c2740;
   --adhoc-soft: #3a3121;
+  --study-soft: #3a2733;
   --shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
@@ -209,6 +213,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .tag-medium { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .m-land { background: var(--land); } .m-snorkel { background: var(--snorkel); }
 .m-dive { background: var(--dive); } .m-survey { background: var(--survey); } .m-adhoc { background: var(--adhoc); }
+.m-study { background: var(--study); }
 
 /* ===== Tables ===== */
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
@@ -276,6 +281,7 @@ td.center, th.center { text-align: center; }
 .sess.m-dive { border-left-color: var(--dive); background: var(--dive-soft); }
 .sess.m-survey { border-left-color: var(--survey); background: var(--survey-soft); }
 .sess.m-adhoc { border-left-color: var(--adhoc); background: var(--adhoc-soft); }
+.sess.m-study { border-left-color: var(--study); background: var(--study-soft); }
 .sess .s-time { font-weight: 700; }
 .sess .s-title { font-weight: 600; }
 .sess .s-meta { color: var(--ink-muted); }
@@ -345,6 +351,7 @@ td.center, th.center { text-align: center; }
 .month-sess.m-dive { border-left-color: var(--dive); background: var(--dive-soft); }
 .month-sess.m-survey { border-left-color: var(--survey); background: var(--survey-soft); }
 .month-sess.m-adhoc { border-left-color: var(--adhoc); background: var(--adhoc-soft); }
+.month-sess.m-study { border-left-color: var(--study); background: var(--study-soft); }
 .month-sess .ms-time { font-weight: 700; margin-right: 3px; }
 .month-sess .ms-title { color: var(--ink-muted); }
 

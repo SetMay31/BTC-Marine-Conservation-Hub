@@ -374,7 +374,7 @@
   }
 
   // Session colours for the printed timetable (matches the hub mediums).
-  const PT_COLORS = { land: ["#6fb3a5", "#dcefe9"], snorkel: ["#65bcd0", "#dcf0f5"], dive: ["#2a7a8a", "#d2e6ea"], survey: ["#8a6fb0", "#e6ddf2"], adhoc: ["#c9975c", "#f2e7d4"] };
+  const PT_COLORS = { land: ["#6fb3a5", "#dcefe9"], snorkel: ["#65bcd0", "#dcf0f5"], dive: ["#2a7a8a", "#d2e6ea"], survey: ["#8a6fb0", "#e6ddf2"], adhoc: ["#c9975c", "#f2e7d4"], study: ["#c77d9b", "#f3e1ea"] };
   function sessCode(se) {
     if (se.kind === "survey") { const c = S.courseByCode(se.courseCode); return c ? c.name : "Survey"; }
     if (se.kind === "adhoc") return se.adhocLabel || "Session";
@@ -395,7 +395,7 @@
   }
   function sessSeg(se) {
     if (se.kind === "survey" || se.kind === "adhoc") return "";
-    return se.name || (se.section === "lecture" ? "Lecture" : "Dive");
+    return se.name || (se.section === "lecture" ? "Lecture" : se.section === "study" ? "Independent Study" : "Dive");
   }
 
   // Printable calendar timetable for one student (Save as PDF from the print dialog).
@@ -441,7 +441,7 @@
            <div class="pt-sub">${esc(stu.name)} &nbsp;·&nbsp; ${esc(fmtLong(start))} → ${esc(fmtLong(end))}${usedDeparture ? "" : (dates.length ? " (last scheduled day)" : "")}</div>
          </div>
        </div>
-       <div class="pt-legend">${lg("land", "Lecture")} ${lg("dive", "Dive")} ${lg("snorkel", "Snorkel")}</div>
+       <div class="pt-legend">${lg("land", "Lecture")} ${lg("dive", "Dive")} ${lg("snorkel", "Snorkel")} ${lg("study", "Independent Study")}</div>
        <table class="pt-cal"><thead><tr>${DOW.map(d => `<th>${d}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` });
     document.body.appendChild(sheet);
     const cleanup = () => { sheet.remove(); window.removeEventListener("afterprint", cleanup); };
@@ -709,7 +709,7 @@
     if (se.kind === "adhoc") return (se.adhocLabel || "Session") + (se.diveIndex ? ` — Dive ${se.diveIndex}` : "");
     const mod = S.moduleByCode(se.moduleCode);
     const base = mod ? mod.name : (se.moduleCode || "Session");
-    const tag = se.name || (se.section === "lecture" ? "Lecture" : (se.section === "dive" ? `Dive${se.diveIndex ? " " + se.diveIndex : ""}` : ""));
+    const tag = se.name || (se.section === "lecture" ? "Lecture" : se.section === "study" ? "Independent Study" : (se.section === "dive" ? `Dive${se.diveIndex ? " " + se.diveIndex : ""}` : ""));
     return tag ? `${base} — ${tag}` : base;
   }
   function shortTitle(se) {
@@ -718,7 +718,7 @@
     if (se.kind === "adhoc") return (se.adhocLabel || "Session") + (se.diveIndex ? ` D${se.diveIndex}` : "");
     const mod = S.moduleByCode(se.moduleCode);
     const code = mod ? mod.code : se.moduleCode;
-    return `${code} ${se.name || (se.section === "lecture" ? "Lec" : "D" + (se.diveIndex || ""))}`;
+    return `${code} ${se.name || (se.section === "lecture" ? "Lec" : se.section === "study" ? "Study" : "D" + (se.diveIndex || ""))}`;
   }
   const byDateTime = (a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""));
 
@@ -1099,9 +1099,11 @@
           [el("option", { value: "" }, "— choose —"), ...S.modules().map(m =>
             el("option", { value: m.code, selected: se.moduleCode === m.code ? "selected" : null }, m.name))])));
         specific.appendChild(field("Section", el("select", { onchange: e => {
-          se.section = e.target.value; se.medium = se.section === "lecture" ? "land" : (S.moduleByCode(se.moduleCode) || {}).medium || "dive";
-        }}, ["lecture", "dive"].map(x => el("option", { value: x, selected: se.section === x ? "selected" : null },
-          x === "lecture" ? "Lecture" : "Dive")))));
+          se.section = e.target.value;
+          se.medium = se.section === "lecture" ? "land" : se.section === "study" ? "study" : (S.moduleByCode(se.moduleCode) || {}).medium || "dive";
+          if (se.section === "study" && (!se.name || se.name === "Lecture" || se.name === "Dive")) se.name = "Independent Study";
+        }}, ["lecture", "dive", "study"].map(x => el("option", { value: x, selected: se.section === x ? "selected" : null },
+          x === "lecture" ? "Lecture" : x === "study" ? "Independent Study" : "Dive")))));
       }
     }
     rebuild();
@@ -1603,6 +1605,21 @@
       }
     }
 
+    // Self-Study — Independent Study blocks for any student
+    const selfBlocks = S.sessions().filter(s => s.adhocType === "SELFSTUDY" && (s.studentIds || []).includes(stu.id)).sort(byDateTime);
+    wrap.appendChild(el("h4", { text: "Self-Study", style: "margin-top:16px" }));
+    wrap.appendChild(el("div", { class: "row", style: "gap:8px;margin:8px 0" }, [
+      el("button", { class: "btn btn-sm btn-primary", onclick: () => openSelfStudyBlock(stu) }, "+ add Self-study block")
+    ]));
+    if (selfBlocks.length) {
+      selfBlocks.forEach(b => wrap.appendChild(el("div", { class: "list-line" }, [
+        el("span", { class: "small", text: `${fmtDay(b.date)} ${b.start || ""}–${b.end || ""} · Self-Study` }),
+        el("button", { class: "btn btn-sm btn-ghost", onclick: () => { closeModal(); openSessionModal(b.id); } }, "edit")
+      ])));
+    } else {
+      wrap.appendChild(el("div", { class: "muted small", text: "No self-study blocks scheduled." }));
+    }
+
     // CDM extras (Course Assist / Survey Lead)
     const extras = S.studentExtras(stu);
     if (extras.length) {
@@ -1670,12 +1687,43 @@
             id: null, kind: "adhoc", adhocType: "INDPROJ", adhocLabel: label,
             indProjKind: isPres ? "presentation" : nature,
             studentIds: [stu.id], date, start, end,
-            section: isDive ? "dive" : "lecture",
-            medium: isDive ? "dive" : "land",
+            section: isDive ? "dive" : "study",
+            medium: isDive ? "dive" : "study",
             name: label, staff, groupId: S.uid("grp")
           });
           reopenStudent(stu.id);
           toast(isPres ? "Presentation added" : "Block added");
+        }}
+      ]
+    });
+  }
+
+  // Self-Study block — Independent Study in the same style as an Independent
+  // Project block, available to any student (not tied to a course requirement).
+  function openSelfStudyBlock(stu) {
+    let date = todayISO(), start = "09:00", hours = 1, staff = "";
+    const hoursSel = el("select", { onchange: e => hours = Number(e.target.value) },
+      [1, 2, 3, 4, 5, 6].map(h => el("option", { value: h, selected: hours === h ? "selected" : null }, h + (h === 1 ? " hour" : " hours"))));
+    const body = [
+      field("Date", el("input", { type: "date", value: date, oninput: e => date = e.target.value })),
+      el("div", { class: "field-row" }, [
+        field("Start", el("input", { type: "time", value: start, oninput: e => start = e.target.value })),
+        field("Duration", hoursSel)
+      ]),
+      field("Lead staff (optional)", staffSelect(v => staff = v))
+    ];
+    modal({
+      title: "Add Self-Study block — " + stu.name,
+      body,
+      actions: [
+        { label: "Cancel", onClick: () => reopenStudent(stu.id) },
+        { label: "Add", class: "btn-primary", onClick: () => {
+          S.addSession({
+            id: null, kind: "adhoc", adhocType: "SELFSTUDY", adhocLabel: "Self-Study",
+            studentIds: [stu.id], date, start, end: addMinutesHHMM(start, hours * 60),
+            section: "study", medium: "study", name: "Self-Study", staff, groupId: S.uid("grp")
+          });
+          reopenStudent(stu.id); toast("Self-Study block added");
         }}
       ]
     });
