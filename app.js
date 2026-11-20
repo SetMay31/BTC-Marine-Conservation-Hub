@@ -1068,11 +1068,12 @@
     // Whole taught modules are added via "+ Schedule module"; this modal is for
     // flexible/ad-hoc dives and surveys. "module" only appears when editing an
     // existing module section.
-    const kinds = ["adhoc", "survey"];
+    const kinds = ["adhoc", "indproj", "selfstudy", "survey"];
     if (existing && se.kind === "module") kinds.push("module");
+    const kindLabel = k => k === "adhoc" ? "Flexible / extra dive" : k === "survey" ? "Conservation survey (staff only)"
+      : k === "indproj" ? "Independent Project (study)" : k === "selfstudy" ? "Self-Study (study)" : "Module section";
     const kindSel = el("select", { onchange: e => { se.kind = e.target.value; rebuild(); } },
-      kinds.map(k => el("option", { value: k, selected: se.kind === k ? "selected" : null },
-        k === "adhoc" ? "Flexible / extra dive" : k === "survey" ? "Conservation survey (staff only)" : "Module section")));
+      kinds.map(k => el("option", { value: k, selected: se.kind === k ? "selected" : null }, kindLabel(k))));
 
     const specific = el("div");
     function rebuild() {
@@ -1094,6 +1095,16 @@
         }}, [el("option", { value: "" }, "— choose —"), ...types.map(t =>
           el("option", { value: t.code, selected: se.adhocType === t.code ? "selected" : null }, t.name))])));
         if (!existing) specific.appendChild(el("p", { class: "muted small", style: "margin-top:-6px", text: "Creates a 2-dive boat trip. Set Start to 07:00 for the morning boat or 12:00 for the afternoon boat." }));
+      } else if (se.kind === "indproj" || se.kind === "selfstudy") {
+        const isSelf = se.kind === "selfstudy";
+        se.adhocType = isSelf ? "SELFSTUDY" : "INDPROJ";
+        se.adhocLabel = isSelf ? "Self-Study" : "Independent Project";
+        se.name = se.adhocLabel; se.medium = "study"; se.section = "study";
+        if (isSelf) se.staff = "";   // self-led
+        specific.appendChild(el("p", { class: "muted small", text: isSelf
+          ? "Self-led Independent Study block — no staff needed. Pick the student(s), date and time."
+          : "Independent Project block (Independent Study) — assign the mentor under Lead staff." }));
+        buildStudents();
       } else {
         specific.appendChild(field("Module", el("select", { onchange: e => { se.moduleCode = e.target.value; buildStudents(); }},
           [el("option", { value: "" }, "— choose —"), ...S.modules().map(m =>
@@ -1157,11 +1168,15 @@
     if (existing) actions.push({ label: "Delete", class: "btn-danger", onClick: () => {
       confirmDialog("Delete this session?", () => { S.deleteSession(existing.id); render(); }); }});
     actions.push({ label: existing ? "Save" : "Create", class: "btn-primary", onClick: () => {
+      if ((se.kind === "indproj" || se.kind === "selfstudy") && !(se.studentIds || []).length) return toast("Pick at least one student");
       const cs = conflictsFor(se, existing ? [existing.id] : []);
       if (cs.length) return toast("Can't save — " + conflictMsg(cs));
       const doSave = () => {
         if (existing) S.updateSession(existing.id, se);
-        else if (se.kind === "adhoc") {
+        else if (se.kind === "indproj" || se.kind === "selfstudy") {
+          // an Independent Study block (project or self-study) is a single study session
+          S.addSession(Object.assign({}, se, { id: null, kind: "adhoc", section: "study", medium: "study", groupId: S.uid("grp") }));
+        } else if (se.kind === "adhoc") {
           // a flexible dive is a 2-dive boat trip (one groupId), like a module's dive block
           const g = S.uid("grp");
           for (let i = 1; i <= 2; i++) S.addSession(Object.assign({}, se, { id: null, groupId: g, section: "dive", diveIndex: i }));
