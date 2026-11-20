@@ -317,7 +317,16 @@
 
   // Office day sheet: a printable / exportable list of a day's outings.
   function daySessions(dISO) { return S.sessions().filter(s => s.date === dISO).sort(byDateTime); }
-  function sessionStudents(se) { return (se.studentIds || []).map(id => (S.studentById(id) || {}).name).filter(Boolean).join(", "); }
+  // Abbreviate a student's incoming dive cert (from their card's Starting level).
+  const CERT_ABBR = { "None / Non-diver": "ND", "Open Water": "OW", "Advanced Open Water": "AOW", "Rescue Diver": "REC", "Divemaster": "DM", "Instructor": "INST" };
+  const certAbbrev = c => CERT_ABBR[c] || (c || "");
+  function sessionStudents(se) {
+    return (se.studentIds || []).map(id => {
+      const s = S.studentById(id); if (!s) return null;
+      const ab = certAbbrev(s.startLevel && s.startLevel.cert);
+      return s.name + (ab ? " (" + ab + ")" : "");
+    }).filter(Boolean).join(", ");
+  }
   function openDaySheet() {
     let d = todayISO();
     const preview = el("div");
